@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 import re
+import base64
+import time
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,7 @@ APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
 RANKINGS_PATH = APP_DIR / "current_rankings.csv"
 BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"
+SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 LEAGUE_IDS = {
     "Shiva": 1465338,
@@ -29,6 +32,80 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+def show_startup_splash() -> None:
+    """Show the branded startup image once per browser session, then open the app."""
+    if st.session_state.get("startup_splash_complete", False):
+        return
+
+    try:
+        splash_bytes = SPLASH_PATH.read_bytes()
+        splash_b64 = base64.b64encode(splash_bytes).decode("utf-8")
+    except Exception:
+        st.session_state["startup_splash_complete"] = True
+        return
+
+    splash_slot = st.empty()
+    splash_slot.markdown(
+        f"""
+<style>
+html, body, [data-testid="stAppViewContainer"], .stApp {{
+  background:#0619ad !important;
+  overflow:hidden !important;
+}}
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+#MainMenu,
+footer {{
+  display:none !important;
+}}
+.block-container {{
+  padding:0 !important;
+  margin:0 !important;
+  max-width:100% !important;
+}}
+.shiva-startup-splash {{
+  position:fixed;
+  inset:0;
+  z-index:2147483647;
+  width:100vw;
+  height:100dvh;
+  background:#0619ad;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  animation:shivaSplashFade 2.6s ease forwards;
+}}
+.shiva-startup-splash img {{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+  display:block;
+}}
+@keyframes shivaSplashFade {{
+  0%,78% {{ opacity:1; }}
+  100% {{ opacity:0; }}
+}}
+</style>
+<div class="shiva-startup-splash" aria-label="Shiva Intelligence loading screen">
+  <img src="data:image/jpeg;base64,{splash_b64}" alt="Shiva Intelligence App loading screen">
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # Keep the splash visible briefly, then transition to the normal home screen.
+    time.sleep(2.6)
+    st.session_state["startup_splash_complete"] = True
+    splash_slot.empty()
+    st.rerun()
+
+
+show_startup_splash()
+
 
 st.markdown(
     """
@@ -775,6 +852,150 @@ div[data-testid="stExpander"] summary p{
   .rule-text{
     font-size:14px;
   }
+}
+
+.hero-card{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(145deg,#202126,#151518);
+  border:1px solid #34353b;
+  border-radius:20px;
+  padding:18px;
+  margin:0 0 14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.24);
+}
+.hero-card::after{
+  content:"";
+  position:absolute;
+  width:150px;
+  height:150px;
+  right:-72px;
+  top:-82px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(49,242,47,.16),transparent 68%);
+  pointer-events:none;
+}
+.hero-kicker{
+  color:#31f22f;
+  font-size:10px;
+  font-weight:1000;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.hero-title{
+  color:#ffffff;
+  font-size:24px;
+  line-height:1.08;
+  font-weight:1000;
+  letter-spacing:-.025em;
+  margin-top:7px;
+}
+.hero-sub{
+  color:#a0a1a7;
+  font-size:13px;
+  line-height:1.45;
+  margin-top:7px;
+}
+.hero-score{
+  color:#31f22f;
+  font-size:35px;
+  line-height:1;
+  font-weight:1000;
+  margin-top:10px;
+}
+.hero-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin-top:14px;
+}
+.hero-mini{
+  background:rgba(255,255,255,.035);
+  border:1px solid #303137;
+  border-radius:13px;
+  padding:10px;
+  min-height:68px;
+}
+.hero-mini-label{
+  color:#7f8087;
+  font-size:8px;
+  line-height:1.15;
+  font-weight:1000;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+.hero-mini-value{
+  color:#ffffff;
+  font-size:14px;
+  line-height:1.1;
+  font-weight:1000;
+  margin-top:8px;
+}
+.hero-mini-value.green{color:#31f22f;}
+.hero-mini-value.blue{color:#67a0ff;}
+.hero-mini-value.red{color:#ff5c66;}
+
+.quick-answer{
+  background:#19191c;
+  border:1px solid #303035;
+  border-radius:16px;
+  padding:14px;
+  margin-bottom:10px;
+}
+.quick-answer-title{
+  color:#ffffff;
+  font-size:16px;
+  font-weight:1000;
+}
+.quick-answer-sub{
+  color:#929399;
+  font-size:12px;
+  line-height:1.4;
+  margin-top:4px;
+}
+.compact-pick-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:8px;
+  margin-bottom:12px;
+}
+.compact-pick{
+  display:grid;
+  grid-template-columns:52px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:center;
+  background:#1b1b1f;
+  border:1px solid #303035;
+  border-radius:14px;
+  padding:11px;
+}
+.compact-round{
+  color:#31f22f;
+  font-size:13px;
+  font-weight:1000;
+}
+.compact-player{
+  color:#ffffff;
+  font-size:14px;
+  font-weight:950;
+}
+.compact-meta{
+  color:#8e8f95;
+  font-size:10px;
+  margin-top:3px;
+}
+.compact-adp{
+  color:#67a0ff;
+  font-size:12px;
+  font-weight:1000;
+}
+@media(max-width:390px){
+  .hero-card{padding:16px;}
+  .hero-title{font-size:21px;}
+  .hero-score{font-size:31px;}
+  .hero-grid{gap:6px;}
+  .hero-mini{padding:8px;}
+  .hero-mini-value{font-size:13px;}
 }
 
 </style>
@@ -1554,76 +1775,81 @@ def set_quick_report_prompt(value: str) -> None:
 
 
 if page == "League History":
-    st.markdown('<div class="section-label">Search Historical Drafts</div>', unsafe_allow_html=True)
-
-    available_seasons = sorted(
-        rows["season"].dropna().astype(int).unique(),
-        reverse=True,
+    season_summary = (
+        rows.groupby("season",as_index=False)
+        .agg(
+            Avg_Score=("Pick Score","mean"),
+            Picks=("player_name","count"),
+        )
+        .sort_values(["Avg_Score","season"],ascending=[False,False])
     )
-    season_choice = st.selectbox(
-        "Season",
-        ["All Seasons"]+[str(x) for x in available_seasons],
-        key="history_season",
-    )
-    player_search = st.text_input(
-        "Search Player",
-        placeholder="Optional: type a player name",
-        key="history_player_search",
-    )
-
-    history_rows = rows.copy()
-    if season_choice != "All Seasons":
-        history_rows = history_rows[history_rows["season"].eq(int(season_choice))]
-
-    if player_search.strip():
-        history_rows = history_rows[
-            history_rows["player_name"].str.contains(
-                player_search.strip(),
-                case=False,
-                na=False,
-            )
-        ]
+    best_history = season_summary.iloc[0] if not season_summary.empty else None
+    best_season = int(best_history["season"]) if best_history is not None else "—"
+    best_grade = letter_grade(float(best_history["Avg_Score"])) if best_history is not None else "—"
 
     st.markdown(
         f"""
-<div class="card">
-  <div class="card-title">{team_name}</div>
-  <div class="card-sub">{manager} · {scope} · {season_choice} · {len(history_rows)} picks</div>
+<div class="hero-card">
+  <div class="hero-kicker">🏛️ League History</div>
+  <div class="hero-title">Your Best Historical Draft</div>
+  <div class="hero-score">{best_season}</div>
+  <div class="hero-sub">Highest average premium-weighted pick score for {team_name}.</div>
+  <div class="hero-grid">
+    <div class="hero-mini"><div class="hero-mini-label">Draft Grade</div><div class="hero-mini-value green">{best_grade}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Seasons</div><div class="hero-mini-value">{rows['season'].nunique()}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Draft Picks</div><div class="hero-mini-value blue">{len(rows)}</div></div>
+  </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    display = history_rows[
-        [
-            "season","league_name","round","overall_pick","player_name","position",
-            "position_draft_rank","position_finish_total",
-            "fantasy_points_ppr","ppg","games_played","Result",
-        ]
-    ].rename(
-        columns={
-            "season":"Season",
-            "league_name":"League",
-            "round":"Round",
-            "overall_pick":"Overall",
-            "player_name":"Player",
-            "position":"Pos",
-            "position_draft_rank":"Drafted Pos Rank",
-            "position_finish_total":"Final Pos Rank",
-            "fantasy_points_ppr":"PPR Points",
-            "ppg":"PPG",
-            "games_played":"Games",
-        }
-    )
+    with st.expander("Search Historical Drafts",expanded=False):
+        available_seasons = sorted(
+            rows["season"].dropna().astype(int).unique(),
+            reverse=True,
+        )
+        season_choice = st.selectbox(
+            "Season",
+            ["All Seasons"]+[str(x) for x in available_seasons],
+            key="history_season",
+        )
+        player_search = st.text_input(
+            "Search Player",
+            placeholder="Optional: type a player name",
+            key="history_player_search",
+        )
 
-    st.dataframe(
-        display.style.format({
-            "PPR Points":"{:.1f}",
-            "PPG":"{:.2f}",
-        }),
-        use_container_width=True,
-        hide_index=True,
-    )
+        history_rows = rows.copy()
+        if season_choice != "All Seasons":
+            history_rows = history_rows[history_rows["season"].eq(int(season_choice))]
+        if player_search.strip():
+            history_rows = history_rows[
+                history_rows["player_name"].str.contains(
+                    player_search.strip(),case=False,na=False
+                )
+            ]
+
+        display = history_rows[
+            [
+                "season","league_name","round","overall_pick","player_name","position",
+                "position_draft_rank","position_finish_total",
+                "fantasy_points_ppr","ppg","games_played","Result",
+            ]
+        ].rename(
+            columns={
+                "season":"Season","league_name":"League","round":"Round",
+                "overall_pick":"Overall","player_name":"Player","position":"Pos",
+                "position_draft_rank":"Drafted Pos Rank",
+                "position_finish_total":"Final Pos Rank",
+                "fantasy_points_ppr":"PPR Points","ppg":"PPG","games_played":"Games",
+            }
+        )
+        st.dataframe(
+            display.style.format({"PPR Points":"{:.1f}","PPG":"{:.2f}"}),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 elif page == "Draft Coach":
     score = weighted_score(rows)
@@ -1719,92 +1945,71 @@ elif page == "Draft Coach":
         st.markdown('</div>', unsafe_allow_html=True)
 
 elif page == "Player Fit":
-    st.caption(f"Verified 2026 FantasyPros ESPN ADP is built in: {len(rankings)} players.")
-
     fit_cols = st.columns(3)
     with fit_cols[0]:
-        fit_teams = st.number_input(
-            "Teams",
-            min_value=8,
-            max_value=16,
-            value=10,
-            step=1,
-            key="fit_teams",
-        )
+        fit_teams = st.number_input("Teams",8,16,10,1,key="fit_teams")
     with fit_cols[1]:
         draft_position = st.number_input(
-            "Draft Position",
-            min_value=1,
-            max_value=int(fit_teams),
-            value=min(4,int(fit_teams)),
-            step=1,
+            "Draft Position",1,int(fit_teams),min(4,int(fit_teams)),1,
             key="fit_draft_position",
         )
     with fit_cols[2]:
-        round_number = st.number_input(
-            "Round",
-            min_value=1,
-            max_value=16,
-            value=2,
-            step=1,
-            key="fit_round",
-        )
+        round_number = st.number_input("Round",1,16,2,1,key="fit_round")
 
     overall_pick = (
         (int(round_number)-1)*int(fit_teams)+int(draft_position)
         if int(round_number)%2 == 1
         else int(round_number)*int(fit_teams)-int(draft_position)+1
     )
+    fits = player_fit(rows,int(overall_pick),int(round_number))
+    top_fit = fits.iloc[0] if not fits.empty else None
 
-    st.markdown(
-        f"""
-<div class="card">
-  <div class="card-title">Round {int(round_number)} · Pick {int(draft_position)} · Overall {overall_pick}</div>
-  <div class="card-sub">Players with ESPN ADP more than six picks earlier than this selection are removed. The list updates automatically when you change teams, draft position, or round.</div>
+    if top_fit is not None:
+        st.markdown(
+            f"""
+<div class="hero-card">
+  <div class="hero-kicker">🎯 Best Fit At Pick {overall_pick}</div>
+  <div class="hero-title">{top_fit['player_name']}</div>
+  <div class="hero-sub">{top_fit['position']} · ESPN ADP {float(top_fit['adp']):.1f} · {top_fit['Availability']}</div>
+  <div class="hero-grid">
+    <div class="hero-mini"><div class="hero-mini-label">Player Fit</div><div class="hero-mini-value green">{top_fit['Fit']}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Round</div><div class="hero-mini-value">{int(round_number)}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Overall Pick</div><div class="hero-mini-value blue">{overall_pick}</div></div>
+  </div>
 </div>
 """,
-        unsafe_allow_html=True,
-    )
+            unsafe_allow_html=True,
+        )
 
-    fits = player_fit(
-        rows,
-        overall_pick=int(overall_pick),
-        round_number=int(round_number),
-    )
+    with st.expander("View And Filter Available Players",expanded=True):
+        availability_filter = st.selectbox(
+            "Availability",
+            ["Likely Available","Possible Slide","Longer Shot","All Plausible"],
+            key="fit_availability_filter",
+        )
+        fit_filter = st.selectbox(
+            "Player Fit",
+            ["Strong Fit","Acceptable","Risky","Avoid at ADP","All Fits"],
+            key="fit_quality_filter",
+        )
+        selected = fits.copy()
+        if availability_filter != "All Plausible":
+            selected = selected[selected["Availability"].eq(availability_filter)]
+        if fit_filter != "All Fits":
+            selected = selected[selected["Fit"].eq(fit_filter)]
+        selected = selected.head(12)
 
-    availability_filter = st.selectbox(
-        "Availability",
-        ["Likely Available","Possible Slide","Longer Shot","All Plausible"],
-        key="fit_availability_filter",
-    )
-    fit_filter = st.selectbox(
-        "Player Fit",
-        ["Strong Fit","Acceptable","Risky","Avoid at ADP","All Fits"],
-        key="fit_quality_filter",
-    )
-
-    selected = fits.copy()
-    if availability_filter != "All Plausible":
-        selected = selected[selected["Availability"].eq(availability_filter)]
-    if fit_filter != "All Fits":
-        selected = selected[selected["Fit"].eq(fit_filter)]
-    selected = selected.head(15)
-
-    st.markdown('<div class="section-label">Most Likely Best Fits</div>',unsafe_allow_html=True)
-
-    if selected.empty:
-        st.info("No players matched those filters. Try All Plausible or All Fits.")
-    else:
-        st.markdown('<div class="card">',unsafe_allow_html=True)
-        for _,player in selected.iterrows():
-            tag_class = {
-                "Strong Fit":"",
-                "Acceptable":" blue",
-                "Risky":" gold",
-                "Avoid at ADP":" red",
-            }[player["Fit"]]
-            st.markdown(
-                f"""
+        if selected.empty:
+            st.info("No players matched those filters.")
+        else:
+            st.markdown('<div class="card">',unsafe_allow_html=True)
+            for _,player in selected.iterrows():
+                tag_class = {
+                    "Strong Fit":"","Acceptable":" blue",
+                    "Risky":" gold","Avoid at ADP":" red",
+                }[player["Fit"]]
+                st.markdown(
+                    f"""
 <div class="list-row">
   <div><span class="pos-badge pos-{player['position']}">{player['position']}</span></div>
   <div>
@@ -1814,42 +2019,59 @@ elif page == "Player Fit":
   <div class="row-tag{tag_class}">{player['Fit']}</div>
 </div>
 """,
-                unsafe_allow_html=True,
-            )
-        st.markdown('</div>',unsafe_allow_html=True)
+                    unsafe_allow_html=True,
+                )
+            st.markdown('</div>',unsafe_allow_html=True)
+
 elif page == "Draft Slot":
-    slot = st.number_input("Draft Position",1,10,1,1)
+    slot = st.number_input("Draft Position",1,10,1,1,key="draft_plan_slot")
     draft_plan = build_draft_plan(rows,int(slot),10,16)
 
-    st.markdown('<div class="section-label">Your 2026 Round-by-Round Draft Plan</div>',unsafe_allow_html=True)
-    st.markdown(
-        f"""
-<div class="card">
-  <div class="card-title">Pick {int(slot)} · 10-Team Snake</div>
-  <div class="card-sub">Recommendations use the verified built-in 2026 ESPN ADP and your historical draft profile.</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    for _,pick in draft_plan.iterrows():
+    first_pick = draft_plan.iloc[0] if not draft_plan.empty else None
+    if first_pick is not None:
         st.markdown(
             f"""
+<div class="hero-card">
+  <div class="hero-kicker">🗺️ Draft Plan · Pick {int(slot)}</div>
+  <div class="hero-title">{first_pick['Recommended Player']}</div>
+  <div class="hero-sub">Your recommended Round 1 selection based on verified ESPN ADP and historical fit.</div>
+  <div class="hero-grid">
+    <div class="hero-mini"><div class="hero-mini-label">Position</div><div class="hero-mini-value green">{first_pick['Pos']}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Overall Pick</div><div class="hero-mini-value">{int(first_pick['Pick'])}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">ESPN ADP</div><div class="hero-mini-value blue">{float(first_pick['ESPN ADP']):.1f}</div></div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div class="section-label">First Three Rounds</div>',unsafe_allow_html=True)
+    st.markdown('<div class="compact-pick-grid">',unsafe_allow_html=True)
+    for _,pick in draft_plan.head(3).iterrows():
+        st.markdown(
+            f"""
+<div class="compact-pick">
+  <div class="compact-round">R{int(pick['Round'])}</div>
+  <div><div class="compact-player">{pick['Recommended Player']} ({pick['Pos']})</div><div class="compact-meta">Pick {int(pick['Pick'])} · {pick['Why']}</div></div>
+  <div class="compact-adp">ADP {float(pick['ESPN ADP']):.1f}</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    st.markdown('</div>',unsafe_allow_html=True)
+
+    with st.expander("View Full 16-Round Plan",expanded=False):
+        for _,pick in draft_plan.iloc[3:].iterrows():
+            st.markdown(
+                f"""
 <div class="coaching-card">
   <div class="coaching-title">Round {int(pick['Round'])} · Pick {int(pick['Pick'])}: {pick['Recommended Player']} ({pick['Pos']})</div>
   <div class="coaching-body">{pick['Why']}</div>
   <div class="row-sub">Other likely options: {pick['Alternatives']}</div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
-
-    with st.expander("View full pick schedule"):
-        st.dataframe(
-            draft_plan[["Round","Pick","Recommended Player","Pos","ESPN ADP","Alternatives"]],
-            use_container_width=True,
-            hide_index=True,
-        )
+                unsafe_allow_html=True,
+            )
 
 elif page == "Live Draft":
     live_league = scope if scope in LEAGUE_IDS else st.selectbox("Live League",["Shiva","Shiva 2.0"])
@@ -1924,7 +2146,24 @@ elif page == "Live Draft":
                 .fillna(-999999).astype(int).isin(drafted_ids)
             ]
 
-        fits = player_fit(rows,next_pick or current_pick).head(8)
+        fits = player_fit(rows,next_pick or current_pick,max(1,int(np.ceil((next_pick or current_pick)/10)))).head(8)
+        if not fits.empty:
+            best_live = fits.iloc[0]
+            st.markdown(
+                f"""
+<div class="hero-card">
+  <div class="hero-kicker">🧩 Best Live Pick</div>
+  <div class="hero-title">{best_live['player_name']}</div>
+  <div class="hero-sub">{best_live['position']} · ESPN ADP {float(best_live['adp']):.1f} · {best_live['Why']}</div>
+  <div class="hero-grid">
+    <div class="hero-mini"><div class="hero-mini-label">Fit</div><div class="hero-mini-value green">{best_live['Fit']}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Next Pick</div><div class="hero-mini-value">{next_pick if next_pick else "—"}</div></div>
+    <div class="hero-mini"><div class="hero-mini-label">Availability</div><div class="hero-mini-value blue">{best_live['Availability']}</div></div>
+  </div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
         st.markdown('<div class="section-label">Recommended Picks</div>',unsafe_allow_html=True)
         st.markdown('<div class="card">',unsafe_allow_html=True)
         for _,player in fits.iterrows():
@@ -1952,9 +2191,10 @@ elif page == "Draft Intelligence":
     )
     st.markdown(
         """
-<div class="card">
-  <div class="card-title">What Do You Want To Know?</div>
-  <div class="card-sub">Ask a plain-English fantasy question. Reports run only against verified fields packaged with the Shiva database.</div>
+<div class="hero-card">
+  <div class="hero-kicker">📊 Ask Shiva</div>
+  <div class="hero-title">What Do You Want To Know?</div>
+  <div class="hero-sub">Ask a plain-English fantasy question. Shiva answers from verified historical scoring, draft, ADP and DOB data.</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -2008,19 +2248,20 @@ elif page == "Draft Intelligence":
             unsafe_allow_html=True,
         )
         if not report["table"].empty:
-            st.dataframe(
-                report["table"],
-                use_container_width=True,
-                hide_index=True,
-            )
+            with st.expander("View Supporting Data",expanded=False):
+                st.dataframe(
+                    report["table"],
+                    use_container_width=True,
+                    hide_index=True,
+                )
 
 else:
-    st.markdown('<div class="section-label">Grade My Draft</div>',unsafe_allow_html=True)
     st.markdown(
         """
-<div class="card">
-  <div class="card-title">Upload a Draft Screenshot</div>
-  <div class="card-sub">Upload a lineup, roster, or full draft screenshot. Then confirm the detected players before grading.</div>
+<div class="hero-card">
+  <div class="hero-kicker">📝 Grade My Draft</div>
+  <div class="hero-title">Upload Your Draft</div>
+  <div class="hero-sub">Upload a lineup, roster or full draft screenshot. Confirm the players, then receive a premium-round-weighted grade.</div>
 </div>
 """,
         unsafe_allow_html=True,
