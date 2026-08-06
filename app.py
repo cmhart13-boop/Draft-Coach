@@ -842,34 +842,51 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
     query = prompt.lower().strip()
 
     position = None
-    for pos in ["qb", "rb", "wr", "te"]:
-        if re.search(rf"\b{pos}\b", query):
+    for pos in ["qb","rb","wr","te"]:
+        if re.search(rf"\b{pos}\b",query):
             position = pos.upper()
             break
 
-    top_match = re.search(r"top\s*(\d+)", query)
+    top_match = re.search(r"top\s*(\d+)",query)
     top_n = int(top_match.group(1)) if top_match else None
 
-    years_match = re.search(r"(?:last|past)\s*(\d+)\s*years?", query)
+    explicit_year_match = re.search(r"\b(20\d{2})\b",query)
+    explicit_year = int(explicit_year_match.group(1)) if explicit_year_match else None
+
+    years_match = re.search(r"(?:last|past)\s*(\d+)\s*years?",query)
     last_years = int(years_match.group(1)) if years_match else None
 
-    season_pool = graded.copy()
+    season_pool = (
+        graded.sort_values(["season","position","position_finish_total","fantasy_points_ppr"],ascending=[True,True,True,False])
+        .drop_duplicates(["season","player_name","position"])
+        .copy()
+    )
+
     if position:
         season_pool = season_pool[season_pool["position"].eq(position)]
 
-    if last_years:
+    if explicit_year:
+        season_pool = season_pool[season_pool["season"].eq(explicit_year)]
+    elif last_years and not season_pool.empty:
         max_season = int(season_pool["season"].max())
         min_season = max_season-last_years+1
-        season_pool = season_pool[season_pool["season"].between(min_season, max_season)]
+        season_pool = season_pool[season_pool["season"].between(min_season,max_season)]
 
     if top_n:
-        season_pool = season_pool[season_pool["position_finish_total"].le(top_n)]
+        season_pool = (
+            season_pool.sort_values(
+                ["season","position_finish_total","fantasy_points_ppr"],
+                ascending=[False,True,False],
+            )
+            .groupby("season",group_keys=False)
+            .head(top_n)
+        )
 
     if "age" in query:
         return {
             "title":"Age report unavailable",
             "answer":"Age is not in this app database",
-            "note":"The current SQLite app contains league drafts, positional finishes, PPR points, PPG and games played. It does not contain verified historical player age, so the app will not estimate or invent it.",
+            "note":"The current database does not contain verified historical player age, so the app will not estimate it.",
             "table":pd.DataFrame(),
         }
 
@@ -877,19 +894,25 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
         return {
             "title":"No matching records",
             "answer":"0 records",
-            "note":"Try changing the position, finish threshold or date range.",
+            "note":"No verified player-seasons matched that position, finish threshold and season.",
             "table":pd.DataFrame(),
         }
+
+    base_columns = [
+        "season","player_name","position","position_finish_total",
+        "fantasy_points_ppr","ppg","games_played",
+    ]
 
     if "average" in query and ("ppg" in query or "points per game" in query):
         value = season_pool["ppg"].mean()
         return {
             "title":"Average fantasy points per game",
             "answer":f"{value:.2f} PPG",
-            "note":f"{len(season_pool)} matched player-seasons.",
-            "table":season_pool[
-                ["season","player_name","position","position_finish_total","ppg","games_played"]
-            ].sort_values(["season","position_finish_total"]),
+            "note":f"{len(season_pool)} unique player-seasons matched.",
+            "table":season_pool[base_columns].sort_values(
+                ["season","position_finish_total"],
+                ascending=[False,True],
+            ),
         }
 
     if "average" in query and ("points" in query or "scoring" in query):
@@ -897,31 +920,30 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
         return {
             "title":"Average full-PPR points",
             "answer":f"{value:.1f} points",
-            "note":f"{len(season_pool)} matched player-seasons.",
-            "table":season_pool[
-                ["season","player_name","position","position_finish_total","fantasy_points_ppr","ppg"]
-            ].sort_values(["season","position_finish_total"]),
+            "note":f"{len(season_pool)} unique player-seasons matched.",
+            "table":season_pool[base_columns].sort_values(
+                ["season","position_finish_total"],
+                ascending=[False,True],
+            ),
         }
 
-    if "average" in query and ("games" in query or "games played" in query):
+    if "average" in query and "games" in query:
         value = season_pool["games_played"].mean()
         return {
             "title":"Average games played",
             "answer":f"{value:.1f} games",
-            "note":f"{len(season_pool)} matched player-seasons.",
-            "table":season_pool[
-                ["season","player_name","position","position_finish_total","games_played","ppg"]
-            ].sort_values(["season","position_finish_total"]),
+            "note":f"{len(season_pool)} unique player-seasons matched.",
+            "table":season_pool[base_columns].sort_values(
+                ["season","position_finish_total"],
+                ascending=[False,True],
+            ),
         }
 
     if "best" in query and "round" in query:
         summary = (
-            season_pool.groupby("round", as_index=False)
-            .agg(
-                Picks=("player_name","count"),
-                Average_Score=("Pick Score","mean"),
-            )
-            .sort_values("Average_Score", ascending=False)
+            graded.groupby("round",as_index=False)
+            .agg(Picks=("player_name","count"),Average_Score=("Pick Score","mean"))
+            .sort_values("Average_Score",ascending=False)
         )
         best = summary.iloc[0]
         return {
@@ -932,48 +954,59 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
         }
 
     if "bust" in query:
-        busts = season_pool[season_pool["Result"].eq("Bust")]
-        rate = len(busts)/len(season_pool)*100
+        busts = graded[graded["Result"].eq("Bust")].copy()
+        rate = len(busts)/len(graded)*100 if len(graded) else 0
         return {
             "title":"Bust rate",
             "answer":f"{rate:.1f}%",
-            "note":f"{len(busts)} busts among {len(season_pool)} matched picks.",
+            "note":f"{len(busts)} busts among {len(graded)} historical draft picks.",
             "table":busts[
-                ["season","manager_name","round","player_name","position","position_draft_rank","position_finish_total"]
-            ].sort_values(["season","round"], ascending=[False,True]),
+                ["season","manager_name","round","player_name","position",
+                 "position_draft_rank","position_finish_total"]
+            ].sort_values(["season","round"],ascending=[False,True]),
         }
 
     if "steal" in query or "best picks" in query:
-        steals = season_pool.sort_values("Pick Score", ascending=False).head(20)
+        steals = graded.sort_values("Pick Score",ascending=False).head(20)
         return {
             "title":"Best historical picks",
             "answer":f"{len(steals)} picks shown",
             "note":"Ranked by the app's premium-round-weighted pick score.",
             "table":steals[
-                ["season","manager_name","round","player_name","position","position_draft_rank","position_finish_total","Result"]
+                ["season","manager_name","round","player_name","position",
+                 "position_draft_rank","position_finish_total","Result"]
             ],
         }
 
-    if "top" in query or "finish" in query:
-        value = season_pool["fantasy_points_ppr"].mean()
+    if top_n or "top" in query or "finish" in query:
+        ordered = season_pool[base_columns].sort_values(
+            ["season","position_finish_total"],
+            ascending=[False,True],
+        )
+        scope_bits = []
+        if position:
+            scope_bits.append(position)
+        if top_n:
+            scope_bits.append(f"Top {top_n}")
+        if explicit_year:
+            scope_bits.append(str(explicit_year))
+        title = " · ".join(scope_bits) if scope_bits else "Matched top-finish report"
         return {
-            "title":"Matched top-finish report",
-            "answer":f"{len(season_pool)} player-seasons",
-            "note":f"Average production: {value:.1f} full-PPR points.",
-            "table":season_pool[
-                ["season","player_name","position","position_finish_total","fantasy_points_ppr","ppg","games_played"]
-            ].sort_values(["season","position_finish_total"]),
+            "title":title,
+            "answer":f"{len(ordered)} player-seasons",
+            "note":"Unique verified player-season results only.",
+            "table":ordered,
         }
 
     return {
         "title":"Quick report",
         "answer":f"{len(season_pool)} matching records",
-        "note":"Supported requests include average PPG, average points, games played, top positional finishes, busts, steals and best rounds. Historical age is not currently available in the app database.",
-        "table":season_pool[
-            ["season","manager_name","round","player_name","position","position_draft_rank","position_finish_total","fantasy_points_ppr","ppg"]
-        ].head(50),
+        "note":"Supported requests include explicit seasons, top positional finishes, average PPG, average points, games played, busts, steals and best rounds.",
+        "table":season_pool[base_columns].sort_values(
+            ["season","position_finish_total"],
+            ascending=[False,True],
+        ).head(50),
     }
-
 
 
 # ESPN-style team selector at the top.
@@ -1444,7 +1477,7 @@ elif page == "Live Draft":
     live_panel()
 
 elif page == "Draft Intelligence":
-    st.markdown('<div class="section-label">Shiva Draft Intelligence Home</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Shiva Draft Intelligence Home</div>',unsafe_allow_html=True)
     st.markdown(
         """
 <div class="card">
@@ -1453,12 +1486,6 @@ elif page == "Draft Intelligence":
 </div>
 """,
         unsafe_allow_html=True,
-    )
-
-    quick_prompt = st.text_input(
-        "Report request",
-        placeholder="Example: Show average PPG for RBs that finished top 5 over the last 5 years",
-        key="quick_report_prompt",
     )
 
     examples = st.columns(2)
@@ -1479,27 +1506,41 @@ elif page == "Draft Intelligence":
             args=("Show me the biggest draft steals",),
         )
 
-    if st.button("Run Report", key="run_quick_report", use_container_width=True):
+    with st.form("quick_report_form",clear_on_submit=False):
+        quick_prompt = st.text_input(
+            "Report request",
+            placeholder="Example: Show me the top 5 WR from 2023",
+            key="quick_report_prompt",
+        )
+        run_report = st.form_submit_button(
+            "Run Report",
+            use_container_width=True,
+        )
+
+    if run_report:
         if not quick_prompt.strip():
             st.warning("Type a report request first.")
         else:
-            report = parse_quick_report(quick_prompt)
-            st.markdown(
-                f"""
+            st.session_state["last_quick_report"] = parse_quick_report(quick_prompt)
+
+    report = st.session_state.get("last_quick_report")
+    if report:
+        st.markdown(
+            f"""
 <div class="report-box">
   <div class="report-title">{report['title']}</div>
   <div class="report-answer">{report['answer']}</div>
   <div class="report-note">{report['note']}</div>
 </div>
 """,
-                unsafe_allow_html=True,
+            unsafe_allow_html=True,
+        )
+        if not report["table"].empty:
+            st.dataframe(
+                report["table"],
+                use_container_width=True,
+                hide_index=True,
             )
-            if not report["table"].empty:
-                st.dataframe(
-                    report["table"],
-                    use_container_width=True,
-                    hide_index=True,
-                )
 
 else:
     st.markdown('<div class="section-label">Grade My Draft</div>',unsafe_allow_html=True)
