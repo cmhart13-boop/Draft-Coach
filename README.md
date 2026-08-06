@@ -1,2 +1,0 @@
-# Draft-Coach
-Draft Coach
