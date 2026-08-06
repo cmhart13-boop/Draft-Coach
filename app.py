@@ -237,22 +237,8 @@ st.markdown(
 
 st.markdown('''
 
-
-
-''', unsafe_allow_html=True)
-
-
-st.markdown('''
-
-
-
-''', unsafe_allow_html=True)
-
-
-st.markdown('''
-
 <style>
-/* MOBILE-FIRST SHIVA TOOLS GRID */
+/* Compact ESPN-style icon navigation */
 .nav-caption{
   color:#77787d;
   font-size:9px;
@@ -261,132 +247,249 @@ st.markdown('''
   text-transform:uppercase;
   margin:10px 0 7px;
 }
+.st-key-nav_history button,
+.st-key-nav_coach button,
+.st-key-nav_fit button,
+.st-key-nav_slot button,
+.st-key-nav_live button,
+.st-key-nav_grade button,
+.st-key-nav_intel button{
+  min-height:72px!important;
+  padding:8px 4px!important;
+  border-radius:18px!important;
+  border:1px solid #313136!important;
+  background:#1c1c1f!important;
+  color:#a9a9ae!important;
+  font-size:10px!important;
+  line-height:1.12!important;
+  font-weight:1000!important;
+  box-shadow:none!important;
+}
+.st-key-nav_history button p,
+.st-key-nav_coach button p,
+.st-key-nav_fit button p,
+.st-key-nav_slot button p,
+.st-key-nav_live button p,
+.st-key-nav_grade button p,
+.st-key-nav_intel button p{
+  white-space:pre-line!important;
+  text-align:center!important;
+  line-height:1.15!important;
+  color:inherit!important;
+}
+.st-key-nav_history button[kind="primary"],
+.st-key-nav_coach button[kind="primary"],
+.st-key-nav_fit button[kind="primary"],
+.st-key-nav_slot button[kind="primary"],
+.st-key-nav_live button[kind="primary"],
+.st-key-nav_grade button[kind="primary"],
+.st-key-nav_intel button[kind="primary"]{
+  background:#2a2a2e!important;
+  color:#ffffff!important;
+  border-color:#31f22f!important;
+  box-shadow:inset 0 -4px 0 #31f22f!important;
+}
+.st-key-nav_history button:hover,
+.st-key-nav_coach button:hover,
+.st-key-nav_fit button:hover,
+.st-key-nav_slot button:hover,
+.st-key-nav_live button:hover,
+.st-key-nav_grade button:hover,
+.st-key-nav_intel button:hover{
+  background:#252529!important;
+  color:#fff!important;
+}
+.report-box{
+  background:#151518;
+  border:1px solid #2c2c31;
+  border-radius:14px;
+  padding:13px;
+  margin:8px 0 12px;
+}
+.report-title{
+  color:#fff;
+  font-size:14px;
+  font-weight:1000;
+}
+.report-answer{
+  color:#31f22f;
+  font-size:25px;
+  line-height:1.05;
+  font-weight:1000;
+  margin-top:6px;
+}
+.report-note{
+  color:#929399;
+  font-size:11px;
+  line-height:1.45;
+  margin-top:6px;
+}
+[data-testid="stTextInput"] input{
+  min-height:48px!important;
+  border-radius:14px!important;
+  background:#1f2330!important;
+  color:#fff!important;
+}
+</style>
 
+''', unsafe_allow_html=True)
+
+
+st.markdown('''
+
+<style>
+/* ESPN-LIKE MOBILE TEAM SELECTOR */
+.team-selector-shell{
+  background:#080809;
+  margin:0 -14px 10px;
+  padding:0 14px 12px;
+  border-bottom:1px solid #222226;
+}
+.team-selector-label{
+  color:#76777d;
+  font-size:9px;
+  font-weight:1000;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.st-key-top_manager [data-baseweb="select"]>div{
+  background:#17171a!important;
+  border:1px solid #303035!important;
+  border-radius:13px!important;
+  min-height:48px!important;
+}
+.st-key-top_manager [data-baseweb="select"] span{
+  color:#fff!important;
+  font-size:15px!important;
+  font-weight:1000!important;
+}
+.st-key-top_league [data-baseweb="select"]>div{
+  background:#17171a!important;
+  border:1px solid #303035!important;
+  border-radius:13px!important;
+  min-height:44px!important;
+}
+.st-key-top_league [data-baseweb="select"] span{
+  color:#5b98ff!important;
+  font-weight:900!important;
+}
+
+/* COMPACT ESPN-STYLE TOOL PANEL */
 .shiva-tools-panel{
   width:100%;
-  max-width:100%;
   margin:0 0 14px;
-  padding:0;
-  border:1px solid #313136;
+  padding:14px 10px 12px;
+  border:1px solid #303035;
   border-radius:18px;
-  background:#202023;
+  background:#1d1d20;
   box-sizing:border-box;
-  overflow:hidden;
 }
-
-.shiva-tools-grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  width:100%;
-  max-width:100%;
-  gap:14px 8px;
-  padding:14px 10px;
-  margin:0;
-  box-sizing:border-box;
-  overflow:hidden;
-}
-
-.shiva-tool{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:flex-start;
-  width:100%;
-  min-width:0;
-  padding:0;
-  margin:0;
-  gap:7px;
-  border:0;
-  border-radius:0;
-  background:transparent;
-  box-shadow:none;
+.shiva-tools-title{
   color:#fff;
-  box-sizing:border-box;
-  overflow:hidden;
-  cursor:pointer;
-  appearance:none;
-  -webkit-appearance:none;
-  text-decoration:none!important;
-  -webkit-tap-highlight-color:transparent;
+  font-size:14px;
+  font-weight:1000;
+  letter-spacing:.02em;
+  margin:0 0 12px 2px;
+}
+.shiva-tools-row{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px 6px;
+  width:100%;
 }
 
-.shiva-tool:hover,
-.shiva-tool:focus,
-.shiva-tool:visited{
-  text-decoration:none!important;
+/* make actual Streamlit buttons look like ESPN circular tools */
+.st-key-nav_history button,
+.st-key-nav_coach button,
+.st-key-nav_fit button,
+.st-key-nav_slot button,
+.st-key-nav_live button,
+.st-key-nav_grade button,
+.st-key-nav_intel button{
+  width:100%!important;
+  min-width:0!important;
+  min-height:92px!important;
+  padding:0 2px!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#a8a8ad!important;
+  font-size:11px!important;
+  line-height:1.1!important;
+  font-weight:800!important;
+  white-space:pre-line!important;
+  text-align:center!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  flex-direction:column!important;
+}
+.st-key-nav_history button p,
+.st-key-nav_coach button p,
+.st-key-nav_fit button p,
+.st-key-nav_slot button p,
+.st-key-nav_live button p,
+.st-key-nav_grade button p,
+.st-key-nav_intel button p{
+  white-space:pre-line!important;
+  text-align:center!important;
+  line-height:1.1!important;
+  margin:0!important;
+  color:inherit!important;
+}
+
+/* emoji/icon line becomes circular through button background pseudo-layer */
+.st-key-nav_history button,
+.st-key-nav_coach button,
+.st-key-nav_fit button,
+.st-key-nav_slot button,
+.st-key-nav_live button,
+.st-key-nav_grade button,
+.st-key-nav_intel button{
+  background:
+    radial-gradient(circle 29px at 50% 29px,#45464c 0 28px,transparent 29px)!important;
+  padding-top:10px!important;
+}
+
+/* active section: thin green ring, no huge green card */
+.st-key-nav_history button[kind="primary"],
+.st-key-nav_coach button[kind="primary"],
+.st-key-nav_fit button[kind="primary"],
+.st-key-nav_slot button[kind="primary"],
+.st-key-nav_live button[kind="primary"],
+.st-key-nav_grade button[kind="primary"],
+.st-key-nav_intel button[kind="primary"]{
+  background:
+    radial-gradient(circle 30px at 50% 29px,#20f45a 0 2px,#4d4d51 3px 28px,transparent 29px)!important;
+  color:#fff!important;
+}
+.st-key-nav_history button:hover,
+.st-key-nav_coach button:hover,
+.st-key-nav_fit button:hover,
+.st-key-nav_slot button:hover,
+.st-key-nav_live button:hover,
+.st-key-nav_grade button:hover,
+.st-key-nav_intel button:hover{
   color:#fff!important;
 }
 
-.shiva-tool-icon{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  width:58px;
-  height:58px;
-  flex:0 0 58px;
-  border:3px solid transparent;
-  border-radius:50%;
-  background:#45464c;
-  font-size:28px;
-  line-height:1;
-  box-sizing:border-box;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
-}
-
-.shiva-tool.active .shiva-tool-icon{
-  border-color:#20f45a;
-  background:#4d4d51;
-}
-
-.shiva-tool-label{
-  display:block;
-  width:100%;
-  max-width:100px;
-  min-width:0;
-  color:#d5d5da;
-  font-size:12px;
-  font-weight:700;
-  line-height:1.15;
-  text-align:center;
-  white-space:normal;
-  overflow-wrap:normal;
-  word-break:normal;
-}
-
-.shiva-tool.active .shiva-tool-label{
-  color:#fff;
-}
-
-.shiva-tool:active .shiva-tool-icon{
-  transform:scale(.96);
-}
-
 @media(max-width:390px){
-  .shiva-tools-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:12px 6px;
-    padding:12px 6px;
+  .shiva-tools-row{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:10px 4px;
   }
-
-  .shiva-tool-icon{
-    width:52px;
-    height:52px;
-    flex-basis:52px;
-    font-size:25px;
-  }
-
-  .shiva-tool-label{
-    max-width:90px;
-    font-size:11px;
-  }
-}
-
-@media(max-width:330px){
-  .shiva-tools-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr));
+  .st-key-nav_history button,
+  .st-key-nav_coach button,
+  .st-key-nav_fit button,
+  .st-key-nav_slot button,
+  .st-key-nav_live button,
+  .st-key-nav_grade button,
+  .st-key-nav_intel button{
+    min-height:88px!important;
+    font-size:10px!important;
   }
 }
 </style>
@@ -839,62 +942,73 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
 
 
 
-# Single mapped Shiva Tools navigation grid.
-TOOLS = [
-    {"id":"history", "page":"League History", "label":"History", "icon":"🏛️"},
-    {"id":"draft-coach", "page":"Draft Coach", "label":"Draft Coach", "icon":"📋"},
-    {"id":"player-fit", "page":"Player Fit", "label":"Player Fit", "icon":"🎯"},
-    {"id":"draft-plan", "page":"Draft Slot", "label":"Draft Plan", "icon":"🗺️"},
-    {"id":"live-draft", "page":"Live Draft", "label":"Live Draft", "icon":"🧩"},
-    {"id":"grade-draft", "page":"Grade My Draft", "label":"Grade Draft", "icon":"📝"},
-    {"id":"intelligence", "page":"Draft Intelligence", "label":"Intelligence", "icon":"📊"},
-]
+# ESPN-style team selector at the top.
+top_league_col, top_manager_col = st.columns([0.36,0.64])
 
-tool_id_to_page = {tool["id"]:tool["page"] for tool in TOOLS}
-page_to_tool_id = {tool["page"]:tool["id"] for tool in TOOLS}
-
-requested_tool = st.query_params.get("tool")
-if isinstance(requested_tool,list):
-    requested_tool = requested_tool[0] if requested_tool else None
-
-if requested_tool in tool_id_to_page:
-    st.session_state.section_nav = tool_id_to_page[requested_tool]
-elif "section_nav" not in st.session_state:
-    st.session_state.section_nav = "Draft Coach"
-
-page = st.session_state.section_nav
-active_tool_id = page_to_tool_id.get(page,"draft-coach")
-
-tool_links = []
-for tool in TOOLS:
-    active_class = " active" if tool["id"] == active_tool_id else ""
-    tool_links.append(
-        f"""
-<a
-  class="shiva-tool{active_class}"
-  href="?tool={tool['id']}"
-  target="_self"
-  aria-label="{tool['label']}"
->
-  <span class="shiva-tool-icon">{tool['icon']}</span>
-  <span class="shiva-tool-label">{tool['label']}</span>
-</a>
-"""
+with top_league_col:
+    scope = st.selectbox(
+        "League",
+        ["Shiva","Shiva 2.0","Combined"],
+        key="top_league",
+        label_visibility="collapsed",
     )
 
+managers = current_managers(scope)
+
+with top_manager_col:
+    manager = st.selectbox(
+        "Current Manager",
+        managers,
+        key="top_manager",
+        label_visibility="collapsed",
+    )
+
+rows = franchise_rows(manager,scope)
+team_name = franchise_name(manager,scope)
+
+# Single functional Shiva Tools navigation. All seven tools remain visible on mobile.
+TOOLS = [
+    ("League History","🏛️\nHistory","history"),
+    ("Draft Coach","📋\nDraft Coach","coach"),
+    ("Player Fit","🎯\nPlayer Fit","fit"),
+    ("Draft Slot","🗺️\nDraft Plan","slot"),
+    ("Live Draft","🧩\nLive Draft","live"),
+    ("Grade My Draft","📝\nGrade Draft","grade"),
+    ("Draft Intelligence","📊\nIntelligence","intel"),
+]
+
+if "section_nav" not in st.session_state:
+    st.session_state.section_nav = "Draft Coach"
+
 st.markdown(
-    '<div class="nav-caption">Shiva Tools</div>'
-    '<section class="shiva-tools-panel">'
-    '<div class="shiva-tools-grid">'
-    + "".join(tool_links)
-    + '</div></section>',
+    f"""
+<div class="shiva-tools-panel">
+  <div class="shiva-tools-title">{team_name}</div>
+</div>
+""",
     unsafe_allow_html=True,
 )
 
-scope = st.selectbox("League",["Shiva","Shiva 2.0","Combined"])
-managers = current_managers(scope)
-manager = st.selectbox("Current Manager",managers)
-rows = franchise_rows(manager,scope)
+nav_row1 = st.columns(4)
+nav_row2 = st.columns(4)
+nav_columns = [
+    nav_row1[0],nav_row1[1],nav_row1[2],nav_row1[3],
+    nav_row2[0],nav_row2[1],nav_row2[2],
+]
+
+for (page_name,label,key),column in zip(TOOLS,nav_columns):
+    with column:
+        if st.button(
+            label,
+            key=f"nav_{key}",
+            use_container_width=True,
+            type="primary" if st.session_state.section_nav == page_name else "secondary",
+        ):
+            st.session_state.section_nav = page_name
+            st.rerun()
+
+page = st.session_state.section_nav
+
 team_name = franchise_name(manager,scope)
 
 if page == "League History":
