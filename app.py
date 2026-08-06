@@ -1192,53 +1192,208 @@ def franchise_name(manager: str,scope: str) -> str:
 
 
 def profile(rows: pd.DataFrame) -> dict[str,Any]:
-    round_scores = rows.groupby("round")["Pick Score"].mean().sort_values(ascending=False)
-    position_scores = rows.groupby("position")["Pick Score"].mean().sort_values(ascending=False)
+    """
+    Build a sample-aware historical coaching profile.
 
-    early = rows[rows["round"] <= 3]
-    middle = rows[rows["round"].between(4,8)]
+    Draft Coach is descriptive: it explains the manager's verified historical
+    results. It does not turn a historically strong position into a command to
+    reach for that position in 2026.
+    """
+    if rows.empty:
+        return {
+            "best_round":None,
+            "worst_round":None,
+            "best_round_score":np.nan,
+            "worst_round_score":np.nan,
+            "best_round_picks":0,
+            "worst_round_picks":0,
+            "best_position":"—",
+            "best_position_score":np.nan,
+            "best_position_picks":0,
+            "early_identity":"—",
+            "early_identity_share":np.nan,
+            "round_gap":np.nan,
+            "round_summary":pd.DataFrame(),
+            "position_summary":pd.DataFrame(),
+        }
 
-    best_round = int(round_scores[round_scores.index <= 8].index[0]) if not round_scores.empty else None
-    worst_round = int(round_scores[round_scores.index <= 8].index[-1]) if not round_scores.empty else None
-    best_position = position_scores.index[0] if not position_scores.empty else "—"
-    worst_position = position_scores.index[-1] if not position_scores.empty else "—"
+    premium = rows[rows["round"].between(1,8)].copy()
+    seasons = max(1,int(rows["season"].nunique()))
+    min_round_samples = max(4,min(8,math.ceil(seasons*.50)))
 
-    early_identity = early["position"].value_counts().index[0] if not early.empty else "—"
-    middle_strength = (
-        middle.groupby("position")["Pick Score"].mean().sort_values(ascending=False).index[0]
-        if not middle.empty else "—"
+    round_summary = (
+        premium.groupby("round",as_index=False)
+        .agg(
+            Picks=("player_name","count"),
+            Average_Score=("Pick Score","mean"),
+            Success_Rate=(
+                "Result",
+                lambda values: values.isin(
+                    ["Steal","Hit","Injury-Protected"]
+                ).mean()*100,
+            ),
+        )
+        .sort_values("round")
+    )
+
+    eligible_rounds = round_summary[
+        round_summary["Picks"].ge(min_round_samples)
+    ].copy()
+    if eligible_rounds.empty:
+        eligible_rounds = round_summary.copy()
+
+    best_row = (
+        eligible_rounds.sort_values(
+            ["Average_Score","Picks","round"],
+            ascending=[False,False,True],
+        ).iloc[0]
+        if not eligible_rounds.empty else None
+    )
+    worst_row = (
+        eligible_rounds.sort_values(
+            ["Average_Score","Picks","round"],
+            ascending=[True,False,True],
+        ).iloc[0]
+        if not eligible_rounds.empty else None
+    )
+
+    # Premium-round position history is a tiebreaker signal only.
+    min_position_samples = max(4,min(8,math.ceil(len(premium)*.08)))
+    position_summary = (
+        premium.groupby("position",as_index=False)
+        .agg(
+            Picks=("player_name","count"),
+            Average_Score=("Pick Score","mean"),
+            Success_Rate=(
+                "Result",
+                lambda values: values.isin(
+                    ["Steal","Hit","Injury-Protected"]
+                ).mean()*100,
+            ),
+        )
+    )
+    eligible_positions = position_summary[
+        position_summary["Picks"].ge(min_position_samples)
+    ].copy()
+    if eligible_positions.empty:
+        eligible_positions = position_summary.copy()
+
+    best_position_row = (
+        eligible_positions.sort_values(
+            ["Average_Score","Picks","position"],
+            ascending=[False,False,True],
+        ).iloc[0]
+        if not eligible_positions.empty else None
+    )
+
+    early = premium[premium["round"].le(3)]
+    early_counts = early["position"].value_counts()
+    early_identity = early_counts.index[0] if not early_counts.empty else "—"
+    early_identity_share = (
+        float(early_counts.iloc[0]/early_counts.sum()*100)
+        if not early_counts.empty else np.nan
+    )
+
+    best_round_score = (
+        float(best_row["Average_Score"]) if best_row is not None else np.nan
+    )
+    worst_round_score = (
+        float(worst_row["Average_Score"]) if worst_row is not None else np.nan
     )
 
     return {
-        "best_round":best_round,
-        "worst_round":worst_round,
-        "best_position":best_position,
-        "worst_position":worst_position,
+        "best_round":int(best_row["round"]) if best_row is not None else None,
+        "worst_round":int(worst_row["round"]) if worst_row is not None else None,
+        "best_round_score":best_round_score,
+        "worst_round_score":worst_round_score,
+        "best_round_picks":int(best_row["Picks"]) if best_row is not None else 0,
+        "worst_round_picks":int(worst_row["Picks"]) if worst_row is not None else 0,
+        "best_position":(
+            str(best_position_row["position"])
+            if best_position_row is not None else "—"
+        ),
+        "best_position_score":(
+            float(best_position_row["Average_Score"])
+            if best_position_row is not None else np.nan
+        ),
+        "best_position_picks":(
+            int(best_position_row["Picks"])
+            if best_position_row is not None else 0
+        ),
         "early_identity":early_identity,
-        "middle_strength":middle_strength,
+        "early_identity_share":early_identity_share,
+        "round_gap":(
+            best_round_score-worst_round_score
+            if pd.notna(best_round_score) and pd.notna(worst_round_score)
+            else np.nan
+        ),
+        "round_summary":round_summary,
+        "position_summary":position_summary,
     }
 
 
 def rules_for(rows: pd.DataFrame) -> tuple[list[str],list[str],list[str]]:
     p = profile(rows)
+
+    if p["best_round"] is None or p["worst_round"] is None:
+        return (
+            ["Not enough verified premium-round history to create coaching rules."],
+            ["Use verified ADP tiers and best-player-available decisions."],
+            ["Do not force a position without supporting data."],
+        )
+
+    position_rule = (
+        f"{p['best_position']} has your strongest verified premium-round score "
+        f"({p['best_position_score']:.1f}/100 across "
+        f"{p['best_position_picks']} picks). Use that only as a tiebreaker "
+        "between players in the same tier—not as permission to reach."
+    )
+
     rules = [
-        f"Use {p['best_position']} as your tiebreaker when similarly ranked players are available.",
-        f"Protect Round {p['best_round']}; it has been one of your strongest premium-round decision points.",
-        f"Slow down in Round {p['worst_round']}; this is where forced picks have historically hurt you.",
-        f"Your early-round identity has been {p['early_identity']}-heavy. Continue only when the tier supports it.",
-        f"In Rounds 4–8, your strongest historical position has been {p['middle_strength']}.",
+        (
+            f"In Round {p['worst_round']}, slow the decision down and follow "
+            "the highest remaining ADP tier. That round has averaged "
+            f"{p['worst_round_score']:.1f}/100 across "
+            f"{p['worst_round_picks']} verified picks."
+        ),
+        (
+            f"Round {p['best_round']} has been your cleanest premium-round "
+            f"decision point at {p['best_round_score']:.1f}/100 across "
+            f"{p['best_round_picks']} picks. Preserve that patient, value-first "
+            "approach."
+        ),
+        position_rule,
     ]
+
     do_more = [
-        f"Lean into {p['best_position']} value when players are in the same tier.",
-        "Prioritize proven weekly scoring and clear roles.",
-        "Build the first three rounds around players you can confidently start every week.",
+        (
+            f"Use a tier-based shortlist before Round {p['worst_round']} so "
+            "you are choosing among comparable values instead of forcing need."
+        ),
+        (
+            f"Keep using best player available in the first three rounds; "
+            f"{p['early_identity']} has been {p['early_identity_share']:.0f}% "
+            "of your early-round selections, but position should never override tier."
+        ),
     ]
+
     do_less = [
-        f"Do not force {p['worst_position']} simply because the roster slot is empty.",
-        f"Do not repeat the decision pattern that made Round {p['worst_round']} your weakest premium round.",
-        "Do not let late-round steals hide mistakes made with premium picks.",
+        (
+            f"Do not interpret historical {p['best_position']} success as a "
+            "2026 mandate to draft that position early."
+        ),
+        (
+            f"Do not repeat the decision pattern behind the "
+            f"{p['round_gap']:.1f}-point gap between your best and weakest "
+            "premium rounds."
+        ),
     ]
-    return rules,do_more,do_less
+
+    # Preserve order while removing accidental duplicate wording.
+    def unique(items: list[str]) -> list[str]:
+        return list(dict.fromkeys(items))
+
+    return unique(rules),unique(do_more),unique(do_less)
 
 
 def snake_schedule(slot: int,teams: int=10,rounds: int=16) -> list[dict[str,int]]:
@@ -1880,28 +2035,45 @@ if page == "League History":
         )
 
 elif page == "Draft Coach":
-    score = weighted_score(rows)
     p = profile(rows)
     rules,do_more,do_less = rules_for(rows)
 
-    draft_identity = f"{p['early_identity']}-Heavy"
-    best_round_text = f"Round {p['best_round']}" if p["best_round"] else "—"
-    focus_text = f"Target {p['best_position']} value"
-    daily_tip = (
-        f"Your strongest historical profile is {p['best_position']} value, "
-        f"while Round {p['worst_round']} has been your biggest premium-round leak."
+    draft_identity = (
+        f"{p['early_identity']}-Heavy"
+        if p["early_identity"] != "—" else "Insufficient Data"
+    )
+    best_round_text = (
+        f"Round {p['best_round']}" if p["best_round"] else "—"
+    )
+    weakest_round_text = (
+        f"Round {p['worst_round']}" if p["worst_round"] else "—"
     )
 
+    if p["best_round"] and p["worst_round"]:
+        coaching_focus = (
+            f"Your clearest 2026 correction point is Round "
+            f"{p['worst_round']}. It has averaged "
+            f"{p['worst_round_score']:.1f}/100, compared with "
+            f"{p['best_round_score']:.1f}/100 in Round "
+            f"{p['best_round']}. Use the highest remaining ADP tier and "
+            "best player available there—do not force a position."
+        )
+    else:
+        coaching_focus = (
+            "There is not enough verified premium-round history to produce "
+            "a reliable manager-specific coaching focus."
+        )
+
     st.markdown(
-        '<div class="section-label">Your 2026 Draft Plan</div>',
+        '<div class="section-label">Your 2026 Draft Coach</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         f"""
 <div class="daily-tip">
-  <div class="daily-tip-label">Today's Draft Tip</div>
-  <div class="daily-tip-text">{daily_tip}</div>
+  <div class="daily-tip-label">2026 Coaching Focus</div>
+  <div class="daily-tip-text">{coaching_focus}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1911,16 +2083,19 @@ elif page == "Draft Coach":
         f"""
 <div class="coach-grid">
   <div class="coach-card">
-    <div class="coach-label">Draft Identity</div>
+    <div class="coach-label">Early Draft Identity</div>
     <div class="coach-value green">{draft_identity}</div>
+    <div class="card-sub">{p['early_identity_share']:.0f}% of Rounds 1–3</div>
   </div>
   <div class="coach-card">
-    <div class="coach-label">Best Round</div>
+    <div class="coach-label">Best Premium Round</div>
     <div class="coach-value blue">{best_round_text}</div>
+    <div class="card-sub">{p['best_round_score']:.1f}/100 · {p['best_round_picks']} picks</div>
   </div>
   <div class="coach-card">
-    <div class="coach-label">2026 Focus</div>
-    <div class="coach-value red">{focus_text}</div>
+    <div class="coach-label">Biggest Premium Leak</div>
+    <div class="coach-value red">{weakest_round_text}</div>
+    <div class="card-sub">{p['worst_round_score']:.1f}/100 · {p['worst_round_picks']} picks</div>
   </div>
 </div>
 """,
@@ -1928,11 +2103,11 @@ elif page == "Draft Coach":
     )
 
     st.markdown(
-        '<div class="section-label">Your Five Draft Rules</div>',
+        '<div class="section-label">Three Actionable Coaching Rules</div>',
         unsafe_allow_html=True,
     )
     st.markdown('<div class="rule-list">', unsafe_allow_html=True)
-    for i, rule in enumerate(rules, 1):
+    for i,rule in enumerate(rules,1):
         st.markdown(
             f"""
 <div class="rule-card">
@@ -1944,8 +2119,8 @@ elif page == "Draft Coach":
         )
     st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.expander("✓ What To Do More", expanded=False):
-        st.markdown('<div class="action-grid">', unsafe_allow_html=True)
+    with st.expander("✓ Do More",expanded=False):
+        st.markdown('<div class="action-grid">',unsafe_allow_html=True)
         for item in do_more:
             st.markdown(
                 f"""
@@ -1956,10 +2131,10 @@ elif page == "Draft Coach":
 """,
                 unsafe_allow_html=True,
             )
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>',unsafe_allow_html=True)
 
-    with st.expander("⚠ What To Avoid", expanded=False):
-        st.markdown('<div class="action-grid">', unsafe_allow_html=True)
+    with st.expander("⚠ Avoid",expanded=False):
+        st.markdown('<div class="action-grid">',unsafe_allow_html=True)
         for item in do_less:
             st.markdown(
                 f"""
@@ -1970,7 +2145,27 @@ elif page == "Draft Coach":
 """,
                 unsafe_allow_html=True,
             )
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>',unsafe_allow_html=True)
+
+    with st.expander("View Draft Coach Evidence",expanded=False):
+        evidence = p["round_summary"].rename(
+            columns={
+                "round":"Round",
+                "Picks":"Verified Picks",
+                "Average_Score":"Average Score",
+                "Success_Rate":"Hit / Protected Rate",
+            }
+        )
+        st.dataframe(
+            evidence.style.format(
+                {
+                    "Average Score":"{:.1f}",
+                    "Hit / Protected Rate":"{:.1f}%",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 elif page == "Player Fit":
     fit_cols = st.columns(3)
