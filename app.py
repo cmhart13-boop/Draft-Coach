@@ -762,12 +762,48 @@ def snake_schedule(slot: int,teams: int=10,rounds: int=16) -> list[dict[str,int]
     return output
 
 
-def player_fit(rows: pd.DataFrame,current_pick: int) -> pd.DataFrame:
+def player_fit(
+    rows: pd.DataFrame,
+    overall_pick: int,
+    round_number: int,
+) -> pd.DataFrame:
+    """
+    Rank only players plausibly available at the selected overall pick.
+
+    Availability is grounded in verified ESPN ADP:
+    - Likely available: ADP at or after the selected pick
+    - Could slide: ADP up to 6 picks earlier than the selected pick
+    - Players with ADP more than 6 picks earlier are excluded
+    """
     p = profile(rows)
     result = rankings.copy()
 
-    result["ADP Value"] = current_pick-result["adp"]
-    result["ADP Strength"] = (1-result["adp"].rank(pct=True))*100
+    # Exclude players whose ESPN ADP is materially earlier than this pick.
+    earliest_plausible_adp = max(1, overall_pick-6)
+    result = result[result["adp"] >= earliest_plausible_adp].copy()
+
+    if result.empty:
+        return result
+
+    result["ADP Gap"] = result["adp"]-overall_pick
+    result["Availability"] = np.select(
+        [
+            result["adp"] >= overall_pick,
+            result["adp"] >= overall_pick-3,
+            result["adp"] >= overall_pick-6,
+        ],
+        [
+            "Likely Available",
+            "Possible Slide",
+            "Longer Shot",
+        ],
+        default="Unlikely",
+    )
+
+    # Closeness to the selected pick matters more than raw overall rank.
+    result["Pick Proximity"] = (
+        100-(result["adp"]-overall_pick).abs().clip(0,30)*(100/30)
+    ).clip(0,100)
 
     bonuses = []
     reasons = []
@@ -784,33 +820,63 @@ def player_fit(rows: pd.DataFrame,current_pick: int) -> pd.DataFrame:
             bonus += 7
             player_reasons.append("fits your strongest middle-round profile")
 
-        if not player_reasons:
-            player_reasons.append("priced from verified 2026 ESPN ADP")
+        # Early rounds favor RB/WR foundation; later rounds open QB/TE value.
+        if round_number <= 3 and player["position"] in {"RB","WR"}:
+            bonus += 7
+            player_reasons.append("fits an early-round RB/WR foundation")
+        elif round_number >= 6 and player["position"] in {"QB","TE"}:
+            bonus += 3
+            player_reasons.append("reasonable later-round positional value")
+
+        availability = str(player["Availability"])
+        if availability == "Likely Available":
+            bonus += 10
+            player_reasons.append("projected available at this pick")
+        elif availability == "Possible Slide":
+            bonus += 4
+            player_reasons.append("could slide to this pick")
+        elif availability == "Longer Shot":
+            bonus -= 4
+            player_reasons.append("would need to fall past ADP")
 
         bonuses.append(bonus)
-        reasons.append(", ".join(player_reasons))
+        reasons.append(", ".join(player_reasons) or "priced from verified 2026 ESPN ADP")
 
     result["Historical Fit"] = bonuses
     result["Why"] = reasons
     result["Recommendation Score"] = (
-        .70*result["ADP Strength"]
-        + 1.4*result["ADP Value"].clip(-20,20)
+        .60*result["Pick Proximity"]
         + result["Historical Fit"]
     )
 
+    # Labels are calculated only within the plausible availability pool.
     q80 = result["Recommendation Score"].quantile(.80)
     q50 = result["Recommendation Score"].quantile(.50)
     q25 = result["Recommendation Score"].quantile(.25)
 
     def fit_label(value: float) -> str:
-        if value >= q80: return "Strong Fit"
-        if value >= q50: return "Acceptable"
-        if value >= q25: return "Risky"
+        if value >= q80:
+            return "Strong Fit"
+        if value >= q50:
+            return "Acceptable"
+        if value >= q25:
+            return "Risky"
         return "Avoid at ADP"
 
     result["Fit"] = result["Recommendation Score"].apply(fit_label)
-    return result.sort_values(["Recommendation Score","adp"],ascending=[False,True])
 
+    availability_order = {
+        "Likely Available":0,
+        "Possible Slide":1,
+        "Longer Shot":2,
+        "Unlikely":3,
+    }
+    result["Availability Order"] = result["Availability"].map(availability_order)
+
+    return result.sort_values(
+        ["Availability Order","Recommendation Score","adp"],
+        ascending=[True,False,True],
+    )
 
 
 def selected_franchise_keys(manager: str, scope: str) -> set[tuple[str,int]]:
@@ -1324,30 +1390,103 @@ elif page == "Draft Coach":
 
 elif page == "Player Fit":
     st.caption(f"Verified 2026 FantasyPros ESPN ADP is built in: {len(rankings)} players.")
-    current_pick = st.number_input("Draft Pick",1,200,1,1)
-    fits = player_fit(rows,int(current_pick))
-    fit_filter = st.selectbox("Show",["Strong Fit","Acceptable","Risky","Avoid at ADP"])
-    selected = fits[fits["Fit"].eq(fit_filter)].head(15)
 
-    st.markdown('<div class="section-label">2026 Player Fit</div>',unsafe_allow_html=True)
-    st.markdown('<div class="card">',unsafe_allow_html=True)
-    for _,player in selected.iterrows():
-        tag_class = {"Strong Fit":"","Acceptable":" blue","Risky":" gold","Avoid at ADP":" red"}[player["Fit"]]
-        st.markdown(
-            f"""
+    fit_cols = st.columns(3)
+    with fit_cols[0]:
+        fit_teams = st.number_input(
+            "Teams",
+            min_value=8,
+            max_value=16,
+            value=10,
+            step=1,
+            key="fit_teams",
+        )
+    with fit_cols[1]:
+        draft_position = st.number_input(
+            "Draft Position",
+            min_value=1,
+            max_value=int(fit_teams),
+            value=min(4,int(fit_teams)),
+            step=1,
+            key="fit_draft_position",
+        )
+    with fit_cols[2]:
+        round_number = st.number_input(
+            "Round",
+            min_value=1,
+            max_value=16,
+            value=2,
+            step=1,
+            key="fit_round",
+        )
+
+    overall_pick = (
+        (int(round_number)-1)*int(fit_teams)+int(draft_position)
+        if int(round_number)%2 == 1
+        else int(round_number)*int(fit_teams)-int(draft_position)+1
+    )
+
+    st.markdown(
+        f"""
+<div class="card">
+  <div class="card-title">Round {int(round_number)} · Pick {int(draft_position)} · Overall {overall_pick}</div>
+  <div class="card-sub">Players with ESPN ADP more than six picks earlier than this selection are removed. The list updates automatically when you change teams, draft position, or round.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    fits = player_fit(
+        rows,
+        overall_pick=int(overall_pick),
+        round_number=int(round_number),
+    )
+
+    availability_filter = st.selectbox(
+        "Availability",
+        ["Likely Available","Possible Slide","Longer Shot","All Plausible"],
+        key="fit_availability_filter",
+    )
+    fit_filter = st.selectbox(
+        "Player Fit",
+        ["Strong Fit","Acceptable","Risky","Avoid at ADP","All Fits"],
+        key="fit_quality_filter",
+    )
+
+    selected = fits.copy()
+    if availability_filter != "All Plausible":
+        selected = selected[selected["Availability"].eq(availability_filter)]
+    if fit_filter != "All Fits":
+        selected = selected[selected["Fit"].eq(fit_filter)]
+    selected = selected.head(15)
+
+    st.markdown('<div class="section-label">Most Likely Best Fits</div>',unsafe_allow_html=True)
+
+    if selected.empty:
+        st.info("No players matched those filters. Try All Plausible or All Fits.")
+    else:
+        st.markdown('<div class="card">',unsafe_allow_html=True)
+        for _,player in selected.iterrows():
+            tag_class = {
+                "Strong Fit":"",
+                "Acceptable":" blue",
+                "Risky":" gold",
+                "Avoid at ADP":" red",
+            }[player["Fit"]]
+            st.markdown(
+                f"""
 <div class="list-row">
   <div><span class="pos-badge pos-{player['position']}">{player['position']}</span></div>
   <div>
     <div class="row-title">{player['player_name']}</div>
-    <div class="row-sub">ESPN ADP {float(player['adp']):.1f} · {player['Why']}</div>
+    <div class="row-sub">ESPN ADP {float(player['adp']):.1f} · {player['Availability']} · {player['Why']}</div>
   </div>
   <div class="row-tag{tag_class}">{player['Fit']}</div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
-    st.markdown('</div>',unsafe_allow_html=True)
-
+                unsafe_allow_html=True,
+            )
+        st.markdown('</div>',unsafe_allow_html=True)
 elif page == "Draft Slot":
     slot = st.number_input("Draft Position",1,10,1,1)
     draft_plan = build_draft_plan(rows,int(slot),10,16)
