@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 from PIL import Image
 
 APP_DIR = Path(__file__).resolve().parent
@@ -376,6 +375,152 @@ st.markdown('''
   font-weight:900!important;
 }
 
+</style>
+
+''', unsafe_allow_html=True)
+
+
+st.markdown('''
+
+<style>
+.shiva-nav-shell{
+  width:100%;
+  margin:0 0 12px;
+  padding:10px 6px 8px;
+  border:1px solid #303035;
+  border-radius:18px;
+  background:#1d1d20;
+}
+.shiva-nav-title{
+  color:#fff;
+  font-size:14px;
+  font-weight:1000;
+  margin:0 0 8px 4px;
+}
+.st-key-tool_history button,
+.st-key-tool_coach button,
+.st-key-tool_fit button,
+.st-key-tool_plan button,
+.st-key-tool_live button,
+.st-key-tool_grade button,
+.st-key-tool_intel button{
+  width:100%!important;
+  min-width:0!important;
+  min-height:78px!important;
+  padding:6px 1px 0!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:
+    radial-gradient(circle 24px at 50% 24px,#45464c 0 23px,transparent 24px)!important;
+  box-shadow:none!important;
+  color:#a8a8ad!important;
+  font-size:9.5px!important;
+  line-height:1.08!important;
+  font-weight:800!important;
+  white-space:pre-line!important;
+  text-align:center!important;
+}
+.st-key-tool_history button p,
+.st-key-tool_coach button p,
+.st-key-tool_fit button p,
+.st-key-tool_plan button p,
+.st-key-tool_live button p,
+.st-key-tool_grade button p,
+.st-key-tool_intel button p{
+  color:inherit!important;
+  white-space:pre-line!important;
+  text-align:center!important;
+  line-height:1.08!important;
+  margin:0!important;
+}
+.st-key-tool_history button[kind="primary"],
+.st-key-tool_coach button[kind="primary"],
+.st-key-tool_fit button[kind="primary"],
+.st-key-tool_plan button[kind="primary"],
+.st-key-tool_live button[kind="primary"],
+.st-key-tool_grade button[kind="primary"],
+.st-key-tool_intel button[kind="primary"]{
+  background:
+    radial-gradient(circle 25px at 50% 24px,#20f45a 0 2px,#4d4d51 3px 23px,transparent 24px)!important;
+  color:#fff!important;
+}
+div[data-testid="stHorizontalBlock"]:has(.st-key-tool_history),
+div[data-testid="stHorizontalBlock"]:has(.st-key-tool_live){
+  gap:4px!important;
+}
+div[data-testid="stHorizontalBlock"]:has(.st-key-tool_history)>div,
+div[data-testid="stHorizontalBlock"]:has(.st-key-tool_live)>div{
+  min-width:0!important;
+}
+
+.daily-tip{
+  background:linear-gradient(135deg,#17371f,#1b1b1e);
+  border:1px solid #2d5e36;
+  border-radius:15px;
+  padding:14px;
+  margin-bottom:12px;
+}
+.daily-tip-label{
+  color:#31f22f;
+  font-size:9px;
+  font-weight:1000;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.daily-tip-text{
+  color:#fff;
+  font-size:14px;
+  line-height:1.4;
+  font-weight:900;
+  margin-top:5px;
+}
+.coach-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:9px;
+  margin-bottom:12px;
+}
+.coach-card{
+  background:#1c1c1f;
+  border:1px solid #29292d;
+  border-radius:14px;
+  min-height:84px;
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.coach-label{
+  color:#77787e;
+  font-size:9px;
+  font-weight:1000;
+  line-height:1.15;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.coach-value{
+  color:#fff;
+  font-size:15px;
+  line-height:1.08;
+  font-weight:1000;
+}
+.coach-value.green{color:#31f22f;}
+.coach-value.blue{color:#5b98ff;}
+.coach-value.red{color:#ff525d;}
+.coaching-card{
+  background:#1c1c1f;
+  border:1px solid #29292d;
+  border-radius:14px;
+  padding:13px;
+  margin-bottom:9px;
+}
+.coaching-title{
+  color:#fff;
+  font-size:13px;
+  line-height:1.38;
+  font-weight:900;
+}
 </style>
 
 ''', unsafe_allow_html=True)
@@ -850,191 +995,48 @@ with top_manager_col:
 rows = franchise_rows(manager,scope)
 team_name = franchise_name(manager,scope)
 
-# Horizontal ESPN-style Shiva Tools navigation.
+# Functional ESPN-style Shiva Tools navigation.
 TOOLS = [
-    {"id":"history", "page":"League History", "label":"History", "icon":"🏛️"},
-    {"id":"draft-coach", "page":"Draft Coach", "label":"Draft Coach", "icon":"📋"},
-    {"id":"player-fit", "page":"Player Fit", "label":"Player Fit", "icon":"🎯"},
-    {"id":"draft-plan", "page":"Draft Slot", "label":"Draft Plan", "icon":"🗺️"},
-    {"id":"live-draft", "page":"Live Draft", "label":"Live Draft", "icon":"🧩"},
-    {"id":"grade-draft", "page":"Grade My Draft", "label":"Grade Draft", "icon":"📝"},
-    {"id":"intelligence", "page":"Draft Intelligence", "label":"Intelligence", "icon":"📊"},
+    ("League History","🏛️\nHistory","history"),
+    ("Draft Coach","📋\nDraft Coach","coach"),
+    ("Player Fit","🎯\nPlayer Fit","fit"),
+    ("Draft Slot","🗺️\nDraft Plan","plan"),
+    ("Live Draft","🧩\nLive Draft","live"),
+    ("Grade My Draft","📝\nGrade Draft","grade"),
+    ("Draft Intelligence","📊\nIntelligence","intel"),
 ]
 
-tool_id_to_page = {tool["id"]:tool["page"] for tool in TOOLS}
-page_to_tool_id = {tool["page"]:tool["id"] for tool in TOOLS}
-
-requested_tool = st.query_params.get("tool")
-if isinstance(requested_tool, list):
-    requested_tool = requested_tool[0] if requested_tool else None
-
-if requested_tool in tool_id_to_page:
-    st.session_state.section_nav = tool_id_to_page[requested_tool]
-elif "section_nav" not in st.session_state:
+if "section_nav" not in st.session_state:
     st.session_state.section_nav = "Draft Coach"
 
+st.markdown(
+    f"""
+<div class="shiva-nav-shell">
+  <div class="shiva-nav-title">{team_name}</div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+nav_row1 = st.columns(4)
+nav_row2 = st.columns(4)
+nav_columns = [
+    nav_row1[0],nav_row1[1],nav_row1[2],nav_row1[3],
+    nav_row2[0],nav_row2[1],nav_row2[2],
+]
+
+for (page_name,label,key),column in zip(TOOLS,nav_columns):
+    with column:
+        if st.button(
+            label,
+            key=f"tool_{key}",
+            use_container_width=True,
+            type="primary" if st.session_state.section_nav == page_name else "secondary",
+        ):
+            st.session_state.section_nav = page_name
+            st.rerun()
+
 page = st.session_state.section_nav
-active_tool_id = page_to_tool_id.get(page, "draft-coach")
-
-tool_markup = []
-for tool in TOOLS:
-    active_class = " active" if tool["id"] == active_tool_id else ""
-    tool_markup.append(
-        f"""
-<button
-  type="button"
-  class="tool{active_class}"
-  onclick="window.parent.location.href='?tool={tool["id"]}'"
-  aria-label="{tool["label"]}"
->
-  <span class="icon">{tool["icon"]}</span>
-  <span class="label">{tool["label"]}</span>
-</button>
-"""
-    )
-
-nav_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  * {{
-    box-sizing:border-box;
-  }}
-
-  html,body {{
-    margin:0;
-    padding:0;
-    width:100%;
-    background:transparent;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-    overflow:hidden;
-  }}
-
-  .panel {{
-    width:100%;
-    padding:14px 10px 12px;
-    border:1px solid #303035;
-    border-radius:18px;
-    background:#1d1d20;
-  }}
-
-  .title {{
-    margin:0 0 12px 2px;
-    color:#ffffff;
-    font-size:14px;
-    line-height:1;
-    font-weight:900;
-  }}
-
-  .grid {{
-    display:grid;
-    grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:12px 6px;
-    width:100%;
-  }}
-
-  .tool {{
-    appearance:none;
-    -webkit-appearance:none;
-    width:100%;
-    min-width:0;
-    min-height:94px;
-    padding:0;
-    margin:0;
-    border:0;
-    border-radius:0;
-    background:transparent;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:flex-start;
-    gap:8px;
-    cursor:pointer;
-    color:#a8a8ad;
-    overflow:hidden;
-    -webkit-tap-highlight-color:transparent;
-  }}
-
-  .icon {{
-    width:58px;
-    height:58px;
-    flex:0 0 58px;
-    border-radius:50%;
-    border:2px solid transparent;
-    background:#45464c;
-    display:grid;
-    place-items:center;
-    font-size:27px;
-    line-height:1;
-  }}
-
-  .label {{
-    width:100%;
-    max-width:78px;
-    color:#a8a8ad;
-    font-size:12px;
-    line-height:1.08;
-    font-weight:700;
-    text-align:center;
-    white-space:normal;
-  }}
-
-  .tool.active .icon {{
-    border-color:#20f45a;
-    background:#4d4d51;
-  }}
-
-  .tool.active .label {{
-    color:#ffffff;
-  }}
-
-  .tool:active .icon {{
-    transform:scale(.96);
-  }}
-
-  @media(max-width:390px) {{
-    .panel {{
-      padding:12px 7px 10px;
-    }}
-
-    .grid {{
-      grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:10px 4px;
-    }}
-
-    .tool {{
-      min-height:88px;
-      gap:7px;
-    }}
-
-    .icon {{
-      width:52px;
-      height:52px;
-      flex-basis:52px;
-      font-size:24px;
-    }}
-
-    .label {{
-      max-width:70px;
-      font-size:10.5px;
-    }}
-  }}
-</style>
-</head>
-<body>
-  <section class="panel">
-    <div class="title">{team_name}</div>
-    <div class="grid">
-      {''.join(tool_markup)}
-    </div>
-  </section>
-</body>
-</html>
-"""
-
-components.html(nav_html, height=230, scrolling=False)
 
 
 team_name = franchise_name(manager,scope)
@@ -1130,12 +1132,21 @@ elif page == "Draft Coach":
     p = profile(rows)
     rules,do_more,do_less = rules_for(rows)
 
+    draft_identity = f"{p['early_identity']}-Heavy"
+    best_round_text = f"Round {p['best_round']}" if p["best_round"] else "—"
+    focus_text = f"Target {p['best_position']} value"
+    daily_tip = (
+        f"Your strongest historical profile is {p['best_position']} value, "
+        f"while Round {p['worst_round']} has been your biggest premium-round leak."
+    )
+
     st.markdown('<div class="section-label">Your 2026 Draft Plan</div>',unsafe_allow_html=True)
+
     st.markdown(
         f"""
-<div class="card">
-  <div class="card-title">{team_name}</div>
-  <div class="card-sub">{manager} · Personalized from your complete historical draft record</div>
+<div class="daily-tip">
+  <div class="daily-tip-label">Today's Draft Tip</div>
+  <div class="daily-tip-text">{daily_tip}</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1143,41 +1154,56 @@ elif page == "Draft Coach":
 
     st.markdown(
         f"""
-<div class="metric-grid">
-  <div class="metric-box"><div class="metric-label">Historical Draft Grade</div><div class="metric-value green">{letter_grade(score)}</div></div>
-  <div class="metric-box"><div class="metric-label">Strongest Position</div><div class="metric-value blue">{p['best_position']}</div></div>
-  <div class="metric-box"><div class="metric-label">Weakest Premium Round</div><div class="metric-value red">R{p['worst_round']}</div></div>
+<div class="coach-grid">
+  <div class="coach-card">
+    <div class="coach-label">Your Draft Identity</div>
+    <div class="coach-value green">{draft_identity}</div>
+  </div>
+  <div class="coach-card">
+    <div class="coach-label">Best Round</div>
+    <div class="coach-value blue">{best_round_text}</div>
+  </div>
+  <div class="coach-card">
+    <div class="coach-label">2026 Focus</div>
+    <div class="coach-value red">{focus_text}</div>
+  </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
     st.markdown('<div class="section-label">Your Five Draft Rules</div>',unsafe_allow_html=True)
-    st.markdown('<div class="card">',unsafe_allow_html=True)
     for i,rule in enumerate(rules,1):
         st.markdown(
             f"""
-<div class="list-row">
-  <div class="rank-circle">{i}</div>
-  <div class="row-title">{rule}</div>
-  <div class="row-tag">2026</div>
+<div class="coaching-card">
+  <div class="coaching-title">{i}. {rule}</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
-    st.markdown('</div>',unsafe_allow_html=True)
 
     st.markdown('<div class="section-label">Do More</div>',unsafe_allow_html=True)
-    st.markdown('<div class="card">',unsafe_allow_html=True)
     for item in do_more:
-        st.markdown(f'<div class="callout"><div class="callout-title">{item}</div></div>',unsafe_allow_html=True)
-    st.markdown('</div>',unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="coaching-card">
+  <div class="coaching-title">✓ {item}</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
     st.markdown('<div class="section-label">Do Less</div>',unsafe_allow_html=True)
-    st.markdown('<div class="card">',unsafe_allow_html=True)
     for item in do_less:
-        st.markdown(f'<div class="callout red"><div class="callout-title">{item}</div></div>',unsafe_allow_html=True)
-    st.markdown('</div>',unsafe_allow_html=True)
+        st.markdown(
+            f"""
+<div class="coaching-card">
+  <div class="coaching-title">⚠ {item}</div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 elif page == "Player Fit":
     st.caption(f"Verified 2026 FantasyPros ESPN ADP is built in: {len(rankings)} players.")
