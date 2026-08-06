@@ -225,7 +225,7 @@ st.markdown(
     """
 <div class="top-shell">
   <div class="top-title-row">
-    <div class="back-text">‹ League</div>
+    <div style="width:52px"></div>
     <div class="page-title">Shiva Draft Intelligence</div>
     <div style="width:52px"></div>
   </div>
@@ -997,17 +997,17 @@ team_name = franchise_name(manager,scope)
 
 # Functional ESPN-style Shiva Tools navigation.
 TOOLS = [
-    ("League History","🏛️\nHistory","history"),
+    ("Draft Intelligence","📊\nIntelligence","intel"),
     ("Draft Coach","📋\nDraft Coach","coach"),
     ("Player Fit","🎯\nPlayer Fit","fit"),
     ("Draft Slot","🗺️\nDraft Plan","plan"),
     ("Live Draft","🧩\nLive Draft","live"),
     ("Grade My Draft","📝\nGrade Draft","grade"),
-    ("Draft Intelligence","📊\nIntelligence","intel"),
+    ("League History","🏛️\nHistory","history"),
 ]
 
 if "section_nav" not in st.session_state:
-    st.session_state.section_nav = "Draft Coach"
+    st.session_state.section_nav = "Draft Intelligence"
 
 st.markdown(
     f"""
@@ -1041,23 +1041,99 @@ page = st.session_state.section_nav
 
 team_name = franchise_name(manager,scope)
 
+
+def build_draft_plan(rows: pd.DataFrame, slot: int, teams: int=10, rounds: int=16) -> pd.DataFrame:
+    """Create an ADP-grounded, round-by-round draft plan without inventing availability."""
+    schedule = snake_schedule(slot, teams, rounds)
+    pool = rankings.copy().sort_values(["adp","position_rank"], na_position="last")
+    profile_data = profile(rows)
+
+    selected_names:set[str] = set()
+    roster_counts = {"QB":0,"RB":0,"WR":0,"TE":0}
+    output = []
+
+    for pick in schedule:
+        rnd = int(pick["Round"])
+        overall = int(pick["Overall"])
+
+        available = pool[~pool["player_name"].isin(selected_names)].copy()
+
+        # A player is considered plausibly available when ADP is not materially earlier
+        # than this selection. This is fully grounded in the built-in verified ESPN ADP.
+        plausible = available[available["adp"] >= max(1, overall-7)].copy()
+        if plausible.empty:
+            plausible = available.copy()
+
+        plausible["availability_gap"] = (plausible["adp"]-overall).abs()
+        plausible["fit_bonus"] = 0.0
+
+        plausible.loc[plausible["position"].eq(profile_data["best_position"]), "fit_bonus"] += 7
+        plausible.loc[plausible["position"].eq(profile_data["middle_strength"]), "fit_bonus"] += 4
+
+        # Roster construction guardrails.
+        if rnd <= 3:
+            plausible.loc[plausible["position"].isin(["RB","WR"]), "fit_bonus"] += 9
+            plausible.loc[plausible["position"].isin(["QB","TE"]), "fit_bonus"] -= 4
+        elif rnd <= 6:
+            plausible.loc[plausible["position"].isin(["RB","WR"]), "fit_bonus"] += 5
+            if roster_counts["QB"] == 0:
+                plausible.loc[plausible["position"].eq("QB"), "fit_bonus"] += 2
+        elif rnd <= 9:
+            if roster_counts["QB"] == 0:
+                plausible.loc[plausible["position"].eq("QB"), "fit_bonus"] += 6
+            if roster_counts["TE"] == 0:
+                plausible.loc[plausible["position"].eq("TE"), "fit_bonus"] += 4
+        else:
+            plausible.loc[plausible["position"].isin(["RB","WR"]), "fit_bonus"] += 3
+
+        plausible["plan_score"] = (
+            -1.6*plausible["availability_gap"]
+            -0.15*plausible["adp"]
+            +plausible["fit_bonus"]
+        )
+
+        choice = plausible.sort_values(
+            ["plan_score","adp"],
+            ascending=[False,True],
+        ).iloc[0]
+
+        selected_names.add(str(choice["player_name"]))
+        pos = str(choice["position"])
+        if pos in roster_counts:
+            roster_counts[pos] += 1
+
+        alternatives = plausible[
+            plausible["player_name"].ne(choice["player_name"])
+        ].sort_values(["plan_score","adp"], ascending=[False,True]).head(2)
+
+        alt_text = ", ".join(alternatives["player_name"].tolist()) or "—"
+        reason_bits = [f"ESPN ADP {float(choice['adp']):.1f}"]
+        if pos == profile_data["best_position"]:
+            reason_bits.append("matches strongest historical position")
+        if rnd <= 3 and pos in {"RB","WR"}:
+            reason_bits.append("builds early RB/WR foundation")
+        if rnd >= 7 and pos in {"QB","TE"}:
+            reason_bits.append("fills a starting position at value")
+
+        output.append({
+            "Round":rnd,
+            "Pick":overall,
+            "Recommended Player":choice["player_name"],
+            "Pos":pos,
+            "ESPN ADP":float(choice["adp"]),
+            "Why":" · ".join(reason_bits),
+            "Alternatives":alt_text,
+        })
+
+    return pd.DataFrame(output)
+
+
+
 if page == "League History":
     st.markdown('<div class="section-label">Search Historical Drafts</div>', unsafe_allow_html=True)
 
-    search_scope = st.selectbox(
-        "League",
-        ["Shiva","Shiva 2.0","Combined"],
-        key="history_scope",
-    )
-    history_managers = current_managers(search_scope)
-    history_manager = st.selectbox(
-        "Team / Manager",
-        history_managers,
-        key="history_manager",
-    )
-
     available_seasons = sorted(
-        franchise_rows(history_manager, search_scope)["season"].dropna().astype(int).unique(),
+        rows["season"].dropna().astype(int).unique(),
         reverse=True,
     )
     season_choice = st.selectbox(
@@ -1066,16 +1142,14 @@ if page == "League History":
         key="history_season",
     )
     player_search = st.text_input(
-        "Search player name",
+        "Search Player",
         placeholder="Optional: type a player name",
         key="history_player_search",
     )
 
-    history_rows = historical_draft_lookup(
-        history_manager,
-        search_scope,
-        season_choice,
-    )
+    history_rows = rows.copy()
+    if season_choice != "All Seasons":
+        history_rows = history_rows[history_rows["season"].eq(int(season_choice))]
 
     if player_search.strip():
         history_rows = history_rows[
@@ -1089,8 +1163,8 @@ if page == "League History":
     st.markdown(
         f"""
 <div class="card">
-  <div class="card-title">{franchise_name(history_manager, search_scope)}</div>
-  <div class="card-sub">{history_manager} · {search_scope} · {season_choice} · {len(history_rows)} picks</div>
+  <div class="card-title">{team_name}</div>
+  <div class="card-sub">{manager} · {scope} · {season_choice} · {len(history_rows)} picks</div>
 </div>
 """,
         unsafe_allow_html=True,
@@ -1207,7 +1281,7 @@ elif page == "Draft Coach":
 
 elif page == "Player Fit":
     st.caption(f"Verified 2026 FantasyPros ESPN ADP is built in: {len(rankings)} players.")
-    current_pick = st.number_input("Your Current Overall Pick",1,200,9,1)
+    current_pick = st.number_input("Draft Pick",1,200,1,1)
     fits = player_fit(rows,int(current_pick))
     fit_filter = st.selectbox("Show",["Strong Fit","Acceptable","Risky","Avoid at ADP"])
     selected = fits[fits["Fit"].eq(fit_filter)].head(15)
@@ -1232,33 +1306,38 @@ elif page == "Player Fit":
     st.markdown('</div>',unsafe_allow_html=True)
 
 elif page == "Draft Slot":
-    slot = st.number_input("Your Draft Slot",1,10,9,1)
-    schedule = pd.DataFrame(snake_schedule(int(slot),10,16))
+    slot = st.number_input("Draft Position",1,10,1,1)
+    draft_plan = build_draft_plan(rows,int(slot),10,16)
 
-    st.markdown('<div class="section-label">Your Pick Schedule</div>',unsafe_allow_html=True)
-    st.dataframe(schedule,use_container_width=True,hide_index=True)
+    st.markdown('<div class="section-label">Your 2026 Round-by-Round Draft Plan</div>',unsafe_allow_html=True)
+    st.markdown(
+        f"""
+<div class="card">
+  <div class="card-title">Pick {int(slot)} · 10-Team Snake</div>
+  <div class="card-sub">Recommendations use the verified built-in 2026 ESPN ADP and your historical draft profile.</div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
-    phases = [
-        ("Rounds 1–2","Build the foundation","Take the highest-tier RB/WR value. Do not force a position after the tier dries up."),
-        ("Round 3","Complete the core","Leave the first three rounds with dependable weekly starters."),
-        ("Rounds 4–6","Add weekly usability","Prioritize clear roles and proven scoring paths."),
-        ("Rounds 7–9","Chase upside","Target players who can become weekly starters."),
-        ("Rounds 10+","Swing for impact","Late misses are cheap. Chase breakout and contingent value."),
-    ]
-
-    st.markdown('<div class="section-label">Round-by-Round Plan</div>',unsafe_allow_html=True)
-    st.markdown('<div class="card">',unsafe_allow_html=True)
-    for phase,title,body in phases:
+    for _,pick in draft_plan.iterrows():
         st.markdown(
             f"""
-<div class="callout blue">
-  <div class="callout-title">{phase}: {title}</div>
-  <div class="callout-sub">{body}</div>
+<div class="coaching-card">
+  <div class="coaching-title">Round {int(pick['Round'])} · Pick {int(pick['Pick'])}: {pick['Recommended Player']} ({pick['Pos']})</div>
+  <div class="coaching-body">{pick['Why']}</div>
+  <div class="row-sub">Other likely options: {pick['Alternatives']}</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
-    st.markdown('</div>',unsafe_allow_html=True)
+
+    with st.expander("View full pick schedule"):
+        st.dataframe(
+            draft_plan[["Round","Pick","Recommended Player","Pos","ESPN ADP","Alternatives"]],
+            use_container_width=True,
+            hide_index=True,
+        )
 
 elif page == "Live Draft":
     live_league = scope if scope in LEAGUE_IDS else st.selectbox("Live League",["Shiva","Shiva 2.0"])
@@ -1355,12 +1434,12 @@ elif page == "Live Draft":
     live_panel()
 
 elif page == "Draft Intelligence":
-    st.markdown('<div class="section-label">Quick Historical Reports</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Shiva Draft Intelligence Home</div>', unsafe_allow_html=True)
     st.markdown(
         """
 <div class="card">
-  <div class="card-title">Ask the Shiva Database</div>
-  <div class="card-sub">Type a plain-English historical request. Reports run only against verified fields available inside the app.</div>
+  <div class="card-title">What Do You Want To Know?</div>
+  <div class="card-sub">Ask a plain-English fantasy question. The report runs only against verified fields available inside the Shiva database.</div>
 </div>
 """,
         unsafe_allow_html=True,
