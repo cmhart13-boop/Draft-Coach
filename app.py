@@ -405,18 +405,22 @@ st.markdown('''
 <style>
 .shiva-nav-shell{
   width:100%;
-  margin:0 0 12px;
-  padding:10px 6px 8px;
-  border:1px solid #303035;
-  border-radius:18px;
-  background:#1d1d20;
+  margin:0 0 8px;
+  padding:8px 4px 4px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
 }
 .shiva-nav-title{
-  color:#fff;
+  color:#ffffff;
   font-size:14px;
   font-weight:1000;
-  margin:0 0 8px 4px;
+  margin:0 0 4px 2px;
 }
+
+/* Native Streamlit buttons remain fully functional.
+   The visual treatment is transparent: no square, pill, circle, or card behind the icon. */
 .st-key-tool_history button,
 .st-key-tool_coach button,
 .st-key-tool_fit button,
@@ -426,21 +430,26 @@ st.markdown('''
 .st-key-tool_intel button{
   width:100%!important;
   min-width:0!important;
-  min-height:78px!important;
-  padding:6px 1px 0!important;
+  min-height:70px!important;
+  padding:3px 1px 2px!important;
   margin:0!important;
   border:0!important;
   border-radius:0!important;
-  background:
-    radial-gradient(circle 24px at 50% 24px,#45464c 0 23px,transparent 24px)!important;
+  background:transparent!important;
   box-shadow:none!important;
-  color:#a8a8ad!important;
-  font-size:9.5px!important;
-  line-height:1.08!important;
-  font-weight:800!important;
+  color:#9a9ba1!important;
+  font-size:10px!important;
+  line-height:1.05!important;
+  font-weight:850!important;
   white-space:pre-line!important;
   text-align:center!important;
+  overflow:visible!important;
+  transition:
+    color 150ms ease,
+    transform 150ms ease,
+    filter 150ms ease!important;
 }
+
 .st-key-tool_history button p,
 .st-key-tool_coach button p,
 .st-key-tool_fit button p,
@@ -451,9 +460,26 @@ st.markdown('''
   color:inherit!important;
   white-space:pre-line!important;
   text-align:center!important;
-  line-height:1.08!important;
+  line-height:1.05!important;
   margin:0!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  overflow:visible!important;
 }
+
+/* Make only the first line — the symbol — visually larger. */
+.st-key-tool_history button p::first-line,
+.st-key-tool_coach button p::first-line,
+.st-key-tool_fit button p::first-line,
+.st-key-tool_plan button p::first-line,
+.st-key-tool_live button p::first-line,
+.st-key-tool_grade button p::first-line,
+.st-key-tool_intel button p::first-line{
+  font-size:31px!important;
+  line-height:1.1!important;
+}
+
+/* Selected section: symbol and label light up, with no box behind them. */
 .st-key-tool_history button[kind="primary"],
 .st-key-tool_coach button[kind="primary"],
 .st-key-tool_fit button[kind="primary"],
@@ -461,16 +487,57 @@ st.markdown('''
 .st-key-tool_live button[kind="primary"],
 .st-key-tool_grade button[kind="primary"],
 .st-key-tool_intel button[kind="primary"]{
-  background:
-    radial-gradient(circle 25px at 50% 24px,#20f45a 0 2px,#4d4d51 3px 23px,transparent 24px)!important;
-  color:#fff!important;
+  background:transparent!important;
+  border:0!important;
+  color:#ffffff!important;
+  box-shadow:none!important;
+  filter:drop-shadow(0 0 7px rgba(32,244,90,.48))!important;
 }
+
+.st-key-tool_history button[kind="primary"] p::first-line,
+.st-key-tool_coach button[kind="primary"] p::first-line,
+.st-key-tool_fit button[kind="primary"] p::first-line,
+.st-key-tool_plan button[kind="primary"] p::first-line,
+.st-key-tool_live button[kind="primary"] p::first-line,
+.st-key-tool_grade button[kind="primary"] p::first-line,
+.st-key-tool_intel button[kind="primary"] p::first-line{
+  color:#20f45a!important;
+  text-shadow:
+    0 0 5px rgba(32,244,90,.9),
+    0 0 12px rgba(32,244,90,.45)!important;
+}
+
+/* Hover/tap keeps the same clean treatment. */
+.st-key-tool_history button:hover,
+.st-key-tool_coach button:hover,
+.st-key-tool_fit button:hover,
+.st-key-tool_plan button:hover,
+.st-key-tool_live button:hover,
+.st-key-tool_grade button:hover,
+.st-key-tool_intel button:hover{
+  background:transparent!important;
+  border:0!important;
+  color:#ffffff!important;
+  box-shadow:none!important;
+}
+.st-key-tool_history button:active,
+.st-key-tool_coach button:active,
+.st-key-tool_fit button:active,
+.st-key-tool_plan button:active,
+.st-key-tool_live button:active,
+.st-key-tool_grade button:active,
+.st-key-tool_intel button:active{
+  transform:scale(.96)!important;
+}
+
+/* Lock both navigation rows side-by-side on mobile. */
 div[data-testid="stHorizontalBlock"]:has(.st-key-tool_intel),
 div[data-testid="stHorizontalBlock"]:has(.st-key-tool_live){
   display:flex!important;
   flex-wrap:nowrap!important;
-  gap:4px!important;
+  gap:2px!important;
   width:100%!important;
+  margin-bottom:0!important;
 }
 div[data-testid="stHorizontalBlock"]:has(.st-key-tool_intel)>div,
 div[data-testid="stHorizontalBlock"]:has(.st-key-tool_live)>div{
@@ -479,73 +546,237 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-tool_live)>div{
   min-width:0!important;
 }
 
+@media(max-width:390px){
+  .st-key-tool_history button,
+  .st-key-tool_coach button,
+  .st-key-tool_fit button,
+  .st-key-tool_plan button,
+  .st-key-tool_live button,
+  .st-key-tool_grade button,
+  .st-key-tool_intel button{
+    min-height:66px!important;
+    font-size:9px!important;
+  }
+
+  .st-key-tool_history button p,
+  .st-key-tool_coach button p,
+  .st-key-tool_fit button p,
+  .st-key-tool_plan button p,
+  .st-key-tool_live button p,
+  .st-key-tool_grade button p,
+  .st-key-tool_intel button p{
+    font-size:9px!important;
+  }
+
+  .st-key-tool_history button p::first-line,
+  .st-key-tool_coach button p::first-line,
+  .st-key-tool_fit button p::first-line,
+  .st-key-tool_plan button p::first-line,
+  .st-key-tool_live button p::first-line,
+  .st-key-tool_grade button p::first-line,
+  .st-key-tool_intel button p::first-line{
+    font-size:28px!important;
+  }
+}
+
 .daily-tip{
-  background:linear-gradient(135deg,#17371f,#1b1b1e);
-  border:1px solid #2d5e36;
-  border-radius:15px;
-  padding:14px;
-  margin-bottom:12px;
+  position:relative;
+  overflow:hidden;
+  background:
+    linear-gradient(135deg,rgba(24,74,37,.96),rgba(24,25,28,.98));
+  border:1px solid rgba(49,242,47,.42);
+  border-radius:18px;
+  padding:18px 17px;
+  margin-bottom:14px;
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
+}
+.daily-tip::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:5px;
+  background:#31f22f;
 }
 .daily-tip-label{
   color:#31f22f;
-  font-size:9px;
+  font-size:10px;
   font-weight:1000;
-  letter-spacing:.1em;
+  letter-spacing:.11em;
   text-transform:uppercase;
 }
 .daily-tip-text{
-  color:#fff;
-  font-size:14px;
-  line-height:1.4;
-  font-weight:900;
-  margin-top:5px;
+  color:#ffffff;
+  font-size:17px;
+  line-height:1.38;
+  font-weight:950;
+  margin-top:7px;
+  letter-spacing:-.01em;
 }
+
 .coach-grid{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:9px;
-  margin-bottom:12px;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:16px;
 }
 .coach-card{
-  background:#1c1c1f;
-  border:1px solid #29292d;
-  border-radius:14px;
-  min-height:84px;
-  padding:10px;
+  background:linear-gradient(180deg,#202024,#19191c);
+  border:1px solid #303035;
+  border-radius:16px;
+  min-height:102px;
+  padding:13px 12px;
   display:flex;
   flex-direction:column;
   justify-content:space-between;
+  box-shadow:0 8px 20px rgba(0,0,0,.16);
 }
 .coach-label{
-  color:#77787e;
+  color:#8d8e94;
   font-size:9px;
   font-weight:1000;
-  line-height:1.15;
-  letter-spacing:.06em;
+  line-height:1.18;
+  letter-spacing:.07em;
   text-transform:uppercase;
 }
 .coach-value{
-  color:#fff;
-  font-size:15px;
+  color:#ffffff;
+  font-size:17px;
   line-height:1.08;
   font-weight:1000;
+  letter-spacing:-.02em;
 }
 .coach-value.green{color:#31f22f;}
-.coach-value.blue{color:#5b98ff;}
-.coach-value.red{color:#ff525d;}
-.coaching-card{
-  background:#1c1c1f;
-  border:1px solid #29292d;
+.coach-value.blue{color:#67a0ff;}
+.coach-value.red{color:#ff5c66;}
+
+.rule-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-bottom:14px;
+}
+.rule-card{
+  display:grid;
+  grid-template-columns:38px minmax(0,1fr);
+  gap:12px;
+  align-items:flex-start;
+  background:linear-gradient(180deg,#202024,#1a1a1d);
+  border:1px solid #303035;
+  border-radius:16px;
+  padding:14px;
+  box-shadow:0 7px 18px rgba(0,0,0,.14);
+}
+.rule-number{
+  width:36px;
+  height:36px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#2b2b30;
+  border:1px solid #3b3b41;
+  color:#31f22f;
+  font-size:15px;
+  font-weight:1000;
+}
+.rule-text{
+  color:#ffffff;
+  font-size:15px;
+  line-height:1.42;
+  font-weight:900;
+  letter-spacing:-.01em;
+}
+
+.action-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:9px;
+}
+.action-card{
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr);
+  gap:10px;
+  align-items:flex-start;
   border-radius:14px;
   padding:13px;
-  margin-bottom:9px;
+  background:#1d1d21;
+  border:1px solid #303035;
 }
-.coaching-title{
-  color:#fff;
-  font-size:13px;
-  line-height:1.38;
-  font-weight:900;
+.action-card.good{
+  border-left:4px solid #31f22f;
 }
+.action-card.warn{
+  border-left:4px solid #ff5c66;
+}
+.action-icon{
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#2b2b30;
+  font-size:14px;
+  font-weight:1000;
+}
+.action-card.good .action-icon{color:#31f22f;}
+.action-card.warn .action-icon{color:#ff5c66;}
+.action-text{
+  color:#f4f4f5;
+  font-size:14px;
+  line-height:1.4;
+  font-weight:850;
+}
+
+div[data-testid="stExpander"]{
+  border:1px solid #303035!important;
+  border-radius:16px!important;
+  background:#19191c!important;
+  overflow:hidden!important;
+  margin-bottom:10px!important;
+}
+div[data-testid="stExpander"] summary{
+  min-height:52px!important;
+  padding:0 14px!important;
+}
+div[data-testid="stExpander"] summary p{
+  color:#ffffff!important;
+  font-size:14px!important;
+  font-weight:950!important;
+}
+
+@media(max-width:390px){
+  .daily-tip{
+    padding:16px 15px;
+  }
+  .daily-tip-text{
+    font-size:16px;
+  }
+  .coach-grid{
+    gap:7px;
+  }
+  .coach-card{
+    min-height:96px;
+    padding:11px 9px;
+  }
+  .coach-value{
+    font-size:15px;
+  }
+  .rule-card{
+    grid-template-columns:34px minmax(0,1fr);
+    gap:10px;
+    padding:13px 12px;
+  }
+  .rule-number{
+    width:32px;
+    height:32px;
+    font-size:14px;
+  }
+  .rule-text{
+    font-size:14px;
+  }
+}
+
 </style>
 
 ''', unsafe_allow_html=True)
@@ -1228,8 +1459,6 @@ for (page_name,label,key),column in zip(TOOLS,nav_columns):
 page = st.session_state.section_nav
 
 
-team_name = franchise_name(manager,scope)
-
 
 def build_draft_plan(rows: pd.DataFrame, slot: int, teams: int=10, rounds: int=16) -> pd.DataFrame:
     """Create an ADP-grounded, round-by-round draft plan without inventing availability."""
@@ -1409,7 +1638,10 @@ elif page == "Draft Coach":
         f"while Round {p['worst_round']} has been your biggest premium-round leak."
     )
 
-    st.markdown('<div class="section-label">Your 2026 Draft Plan</div>',unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-label">Your 2026 Draft Plan</div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown(
         f"""
@@ -1425,7 +1657,7 @@ elif page == "Draft Coach":
         f"""
 <div class="coach-grid">
   <div class="coach-card">
-    <div class="coach-label">Your Draft Identity</div>
+    <div class="coach-label">Draft Identity</div>
     <div class="coach-value green">{draft_identity}</div>
   </div>
   <div class="coach-card">
@@ -1441,38 +1673,50 @@ elif page == "Draft Coach":
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="section-label">Your Five Draft Rules</div>',unsafe_allow_html=True)
-    for i,rule in enumerate(rules,1):
+    st.markdown(
+        '<div class="section-label">Your Five Draft Rules</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="rule-list">', unsafe_allow_html=True)
+    for i, rule in enumerate(rules, 1):
         st.markdown(
             f"""
-<div class="coaching-card">
-  <div class="coaching-title">{i}. {rule}</div>
+<div class="rule-card">
+  <div class="rule-number">{i}</div>
+  <div class="rule-text">{rule}</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-label">Do More</div>',unsafe_allow_html=True)
-    for item in do_more:
-        st.markdown(
-            f"""
-<div class="coaching-card">
-  <div class="coaching-title">✓ {item}</div>
+    with st.expander("✓ What To Do More", expanded=False):
+        st.markdown('<div class="action-grid">', unsafe_allow_html=True)
+        for item in do_more:
+            st.markdown(
+                f"""
+<div class="action-card good">
+  <div class="action-icon">✓</div>
+  <div class="action-text">{item}</div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
+                unsafe_allow_html=True,
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-label">Do Less</div>',unsafe_allow_html=True)
-    for item in do_less:
-        st.markdown(
-            f"""
-<div class="coaching-card">
-  <div class="coaching-title">⚠ {item}</div>
+    with st.expander("⚠ What To Avoid", expanded=False):
+        st.markdown('<div class="action-grid">', unsafe_allow_html=True)
+        for item in do_less:
+            st.markdown(
+                f"""
+<div class="action-card warn">
+  <div class="action-icon">!</div>
+  <div class="action-text">{item}</div>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
+                unsafe_allow_html=True,
+            )
+        st.markdown('</div>', unsafe_allow_html=True)
 
 elif page == "Player Fit":
     st.caption(f"Verified 2026 FantasyPros ESPN ADP is built in: {len(rankings)} players.")
