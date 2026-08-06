@@ -244,8 +244,15 @@ st.markdown('''
 
 st.markdown('''
 
+
+
+''', unsafe_allow_html=True)
+
+
+st.markdown('''
+
 <style>
-/* ESPN-STYLE SHIVA TOOLS ROW */
+/* MOBILE-FIRST SHIVA TOOLS GRID */
 .nav-caption{
   color:#77787d;
   font-size:9px;
@@ -257,78 +264,71 @@ st.markdown('''
 
 .shiva-tools-panel{
   width:100%;
+  max-width:100%;
   margin:0 0 14px;
-  padding:16px 10px 14px;
+  padding:0;
   border:1px solid #313136;
   border-radius:18px;
   background:#202023;
   box-sizing:border-box;
   overflow:hidden;
-  max-height:150px;
 }
 
-.shiva-tools-scroll{
-  display:flex;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  align-items:flex-start;
-  gap:10px;
+.shiva-tools-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
   width:100%;
-  overflow-x:auto;
-  overflow-y:hidden;
-  padding:0 2px 2px;
-  scroll-snap-type:x proximity;
-  scrollbar-width:none;
-  -ms-overflow-style:none;
-  -webkit-overflow-scrolling:touch;
-  overscroll-behavior-x:contain;
-}
-
-.shiva-tools-scroll::-webkit-scrollbar{
-  display:none;
+  max-width:100%;
+  gap:14px 8px;
+  padding:14px 10px;
+  margin:0;
+  box-sizing:border-box;
+  overflow:hidden;
 }
 
 .shiva-tool{
-  flex:0 0 74px;
-  min-width:74px;
-  max-width:74px;
-  min-height:92px;
-  margin:0;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent;
-  box-shadow:none;
-  color:#a8a8ad;
   display:flex;
   flex-direction:column;
   align-items:center;
   justify-content:flex-start;
-  gap:8px;
-  text-align:center;
+  width:100%;
+  min-width:0;
+  padding:0;
+  margin:0;
+  gap:7px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#fff;
+  box-sizing:border-box;
+  overflow:hidden;
   cursor:pointer;
-  scroll-snap-align:start;
-  -webkit-tap-highlight-color:transparent;
+  appearance:none;
+  -webkit-appearance:none;
   text-decoration:none!important;
+  -webkit-tap-highlight-color:transparent;
 }
 
 .shiva-tool:hover,
 .shiva-tool:focus,
 .shiva-tool:visited{
   text-decoration:none!important;
+  color:#fff!important;
 }
 
 .shiva-tool-icon{
+  display:flex;
+  align-items:center;
+  justify-content:center;
   width:58px;
   height:58px;
   flex:0 0 58px;
+  border:3px solid transparent;
   border-radius:50%;
-  display:grid;
-  place-items:center;
-  background:#444448;
-  font-size:26px;
+  background:#45464c;
+  font-size:28px;
   line-height:1;
-  border:2px solid transparent;
   box-sizing:border-box;
   transition:
     background 160ms ease,
@@ -336,42 +336,57 @@ st.markdown('''
     transform 160ms ease;
 }
 
+.shiva-tool.active .shiva-tool-icon{
+  border-color:#20f45a;
+  background:#4d4d51;
+}
+
 .shiva-tool-label{
   display:block;
-  width:74px;
-  max-width:74px;
-  color:#a8a8ad;
-  font-size:12.5px;
+  width:100%;
+  max-width:100px;
+  min-width:0;
+  color:#d5d5da;
+  font-size:12px;
   font-weight:700;
-  line-height:1.08;
+  line-height:1.15;
   text-align:center;
   white-space:normal;
   overflow-wrap:normal;
-}
-
-.shiva-tool.active .shiva-tool-icon{
-  background:#4d4d51;
-  border-color:#24f13d;
+  word-break:normal;
 }
 
 .shiva-tool.active .shiva-tool-label{
-  color:#ffffff;
+  color:#fff;
 }
 
 .shiva-tool:active .shiva-tool-icon{
   transform:scale(.96);
 }
 
-@media(min-width:700px){
-  .shiva-tool{
-    flex-basis:82px;
-    min-width:82px;
-    max-width:82px;
+@media(max-width:390px){
+  .shiva-tools-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:12px 6px;
+    padding:12px 6px;
+  }
+
+  .shiva-tool-icon{
+    width:52px;
+    height:52px;
+    flex-basis:52px;
+    font-size:25px;
   }
 
   .shiva-tool-label{
-    width:82px;
-    max-width:82px;
+    max-width:90px;
+    font-size:11px;
+  }
+}
+
+@media(max-width:330px){
+  .shiva-tools-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
 </style>
@@ -824,7 +839,7 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
 
 
 
-# Single mapped Shiva Tools navigation row.
+# Single mapped Shiva Tools navigation grid.
 TOOLS = [
     {"id":"history", "page":"League History", "label":"History", "icon":"🏛️"},
     {"id":"draft-coach", "page":"Draft Coach", "label":"Draft Coach", "icon":"📋"},
@@ -839,7 +854,7 @@ tool_id_to_page = {tool["id"]:tool["page"] for tool in TOOLS}
 page_to_tool_id = {tool["page"]:tool["id"] for tool in TOOLS}
 
 requested_tool = st.query_params.get("tool")
-if isinstance(requested_tool, list):
+if isinstance(requested_tool,list):
     requested_tool = requested_tool[0] if requested_tool else None
 
 if requested_tool in tool_id_to_page:
@@ -848,7 +863,7 @@ elif "section_nav" not in st.session_state:
     st.session_state.section_nav = "Draft Coach"
 
 page = st.session_state.section_nav
-active_tool_id = page_to_tool_id.get(page, "draft-coach")
+active_tool_id = page_to_tool_id.get(page,"draft-coach")
 
 tool_links = []
 for tool in TOOLS:
@@ -870,7 +885,7 @@ for tool in TOOLS:
 st.markdown(
     '<div class="nav-caption">Shiva Tools</div>'
     '<section class="shiva-tools-panel">'
-    '<div class="shiva-tools-scroll">'
+    '<div class="shiva-tools-grid">'
     + "".join(tool_links)
     + '</div></section>',
     unsafe_allow_html=True,
