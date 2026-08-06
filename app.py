@@ -237,8 +237,15 @@ st.markdown(
 
 st.markdown('''
 
+
+
+''', unsafe_allow_html=True)
+
+
+st.markdown('''
+
 <style>
-/* Compact ESPN-style icon navigation */
+/* ESPN-STYLE SHIVA TOOLS ROW */
 .nav-caption{
   color:#77787d;
   font-size:9px;
@@ -247,88 +254,125 @@ st.markdown('''
   text-transform:uppercase;
   margin:10px 0 7px;
 }
-.st-key-nav_history button,
-.st-key-nav_coach button,
-.st-key-nav_fit button,
-.st-key-nav_slot button,
-.st-key-nav_live button,
-.st-key-nav_grade button,
-.st-key-nav_intel button{
-  min-height:72px!important;
-  padding:8px 4px!important;
-  border-radius:18px!important;
-  border:1px solid #313136!important;
-  background:#1c1c1f!important;
-  color:#a9a9ae!important;
-  font-size:10px!important;
-  line-height:1.12!important;
-  font-weight:1000!important;
-  box-shadow:none!important;
+
+.shiva-tools-panel{
+  width:100%;
+  margin:0 0 14px;
+  padding:16px 10px 14px;
+  border:1px solid #313136;
+  border-radius:18px;
+  background:#202023;
+  box-sizing:border-box;
+  overflow:hidden;
+  max-height:150px;
 }
-.st-key-nav_history button p,
-.st-key-nav_coach button p,
-.st-key-nav_fit button p,
-.st-key-nav_slot button p,
-.st-key-nav_live button p,
-.st-key-nav_grade button p,
-.st-key-nav_intel button p{
-  white-space:pre-line!important;
-  text-align:center!important;
-  line-height:1.15!important;
-  color:inherit!important;
+
+.shiva-tools-scroll{
+  display:flex;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  align-items:flex-start;
+  gap:10px;
+  width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding:0 2px 2px;
+  scroll-snap-type:x proximity;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
 }
-.st-key-nav_history button[kind="primary"],
-.st-key-nav_coach button[kind="primary"],
-.st-key-nav_fit button[kind="primary"],
-.st-key-nav_slot button[kind="primary"],
-.st-key-nav_live button[kind="primary"],
-.st-key-nav_grade button[kind="primary"],
-.st-key-nav_intel button[kind="primary"]{
-  background:#2a2a2e!important;
-  color:#ffffff!important;
-  border-color:#31f22f!important;
-  box-shadow:inset 0 -4px 0 #31f22f!important;
+
+.shiva-tools-scroll::-webkit-scrollbar{
+  display:none;
 }
-.st-key-nav_history button:hover,
-.st-key-nav_coach button:hover,
-.st-key-nav_fit button:hover,
-.st-key-nav_slot button:hover,
-.st-key-nav_live button:hover,
-.st-key-nav_grade button:hover,
-.st-key-nav_intel button:hover{
-  background:#252529!important;
-  color:#fff!important;
+
+.shiva-tool{
+  flex:0 0 74px;
+  min-width:74px;
+  max-width:74px;
+  min-height:92px;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#a8a8ad;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  text-align:center;
+  cursor:pointer;
+  scroll-snap-align:start;
+  -webkit-tap-highlight-color:transparent;
+  text-decoration:none!important;
 }
-.report-box{
-  background:#151518;
-  border:1px solid #2c2c31;
-  border-radius:14px;
-  padding:13px;
-  margin:8px 0 12px;
+
+.shiva-tool:hover,
+.shiva-tool:focus,
+.shiva-tool:visited{
+  text-decoration:none!important;
 }
-.report-title{
-  color:#fff;
-  font-size:14px;
-  font-weight:1000;
+
+.shiva-tool-icon{
+  width:58px;
+  height:58px;
+  flex:0 0 58px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#444448;
+  font-size:26px;
+  line-height:1;
+  border:2px solid transparent;
+  box-sizing:border-box;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
 }
-.report-answer{
-  color:#31f22f;
-  font-size:25px;
-  line-height:1.05;
-  font-weight:1000;
-  margin-top:6px;
+
+.shiva-tool-label{
+  display:block;
+  width:74px;
+  max-width:74px;
+  color:#a8a8ad;
+  font-size:12.5px;
+  font-weight:700;
+  line-height:1.08;
+  text-align:center;
+  white-space:normal;
+  overflow-wrap:normal;
 }
-.report-note{
-  color:#929399;
-  font-size:11px;
-  line-height:1.45;
-  margin-top:6px;
+
+.shiva-tool.active .shiva-tool-icon{
+  background:#4d4d51;
+  border-color:#24f13d;
 }
-[data-testid="stTextInput"] input{
-  min-height:48px!important;
-  border-radius:14px!important;
-  background:#1f2330!important;
-  color:#fff!important;
+
+.shiva-tool.active .shiva-tool-label{
+  color:#ffffff;
+}
+
+.shiva-tool:active .shiva-tool-icon{
+  transform:scale(.96);
+}
+
+@media(min-width:700px){
+  .shiva-tool{
+    flex-basis:82px;
+    min-width:82px;
+    max-width:82px;
+  }
+
+  .shiva-tool-label{
+    width:82px;
+    max-width:82px;
+  }
 }
 </style>
 
@@ -780,37 +824,57 @@ def parse_quick_report(prompt: str) -> dict[str, Any]:
 
 
 
-# Compact top navigation with symbols above each title.
-if "section_nav" not in st.session_state:
-    st.session_state.section_nav = "Draft Coach"
-
-st.markdown('<div class="nav-caption">Shiva Tools</div>', unsafe_allow_html=True)
-
-nav_row1 = st.columns(4)
-nav_row2 = st.columns(3)
-
-nav_items = [
-    ("League History", "🏛️\nHistory", "history", nav_row1[0]),
-    ("Draft Coach", "📋\nDraft Coach", "coach", nav_row1[1]),
-    ("Player Fit", "🎯\nPlayer Fit", "fit", nav_row1[2]),
-    ("Draft Slot", "🗺️\nDraft Plan", "slot", nav_row1[3]),
-    ("Live Draft", "🧩\nLive Draft", "live", nav_row2[0]),
-    ("Grade My Draft", "📝\nGrade Draft", "grade", nav_row2[1]),
-    ("Draft Intelligence", "📊\nIntelligence", "intel", nav_row2[2]),
+# Single mapped Shiva Tools navigation row.
+TOOLS = [
+    {"id":"history", "page":"League History", "label":"History", "icon":"🏛️"},
+    {"id":"draft-coach", "page":"Draft Coach", "label":"Draft Coach", "icon":"📋"},
+    {"id":"player-fit", "page":"Player Fit", "label":"Player Fit", "icon":"🎯"},
+    {"id":"draft-plan", "page":"Draft Slot", "label":"Draft Plan", "icon":"🗺️"},
+    {"id":"live-draft", "page":"Live Draft", "label":"Live Draft", "icon":"🧩"},
+    {"id":"grade-draft", "page":"Grade My Draft", "label":"Grade Draft", "icon":"📝"},
+    {"id":"intelligence", "page":"Draft Intelligence", "label":"Intelligence", "icon":"📊"},
 ]
 
-for page_name, label, key, column in nav_items:
-    with column:
-        if st.button(
-            label,
-            key=f"nav_{key}",
-            use_container_width=True,
-            type="primary" if st.session_state.section_nav == page_name else "secondary",
-        ):
-            st.session_state.section_nav = page_name
-            st.rerun()
+tool_id_to_page = {tool["id"]:tool["page"] for tool in TOOLS}
+page_to_tool_id = {tool["page"]:tool["id"] for tool in TOOLS}
+
+requested_tool = st.query_params.get("tool")
+if isinstance(requested_tool, list):
+    requested_tool = requested_tool[0] if requested_tool else None
+
+if requested_tool in tool_id_to_page:
+    st.session_state.section_nav = tool_id_to_page[requested_tool]
+elif "section_nav" not in st.session_state:
+    st.session_state.section_nav = "Draft Coach"
 
 page = st.session_state.section_nav
+active_tool_id = page_to_tool_id.get(page, "draft-coach")
+
+tool_links = []
+for tool in TOOLS:
+    active_class = " active" if tool["id"] == active_tool_id else ""
+    tool_links.append(
+        f"""
+<a
+  class="shiva-tool{active_class}"
+  href="?tool={tool['id']}"
+  target="_self"
+  aria-label="{tool['label']}"
+>
+  <span class="shiva-tool-icon">{tool['icon']}</span>
+  <span class="shiva-tool-label">{tool['label']}</span>
+</a>
+"""
+    )
+
+st.markdown(
+    '<div class="nav-caption">Shiva Tools</div>'
+    '<section class="shiva-tools-panel">'
+    '<div class="shiva-tools-scroll">'
+    + "".join(tool_links)
+    + '</div></section>',
+    unsafe_allow_html=True,
+)
 
 scope = st.selectbox("League",["Shiva","Shiva 2.0","Combined"])
 managers = current_managers(scope)
