@@ -1,0 +1,13 @@
+Season,Expected Regular-Season Weeks,Actual Regular-Season Weeks,Week Range,Player-Week Rows,Unique Players,Duplicate Player-Weeks,Source File,Status
+2014,17,17,1-17,16796,1834,0,stats_player_week_2014(1).csv,PASS
+2015,17,17,1-17,16865,1837,0,stats_player_week_2015(1).csv,PASS
+2016,17,17,1-17,16762,1845,0,stats_player_week_2016(1).csv,PASS
+2017,17,17,1-17,16732,1858,0,stats_player_week_2017(1).csv,PASS
+2018,17,17,1-17,16679,1875,0,stats_player_week_2018(1).csv,PASS
+2019,17,17,1-17,5045,612,0,player_stats_2019(1).csv,PASS
+2020,17,17,1-17,16748,1977,0,stats_player_week_2020(1).csv,PASS
+2021,18,18,1-18,18102,2072,0,stats_player_week_2021(1).csv,PASS
+2022,18,18,1-18,17953,1997,0,stats_player_week_2022(1).csv,PASS
+2023,18,18,1-18,17772,1937,0,stats_player_week_2023(1).csv,PASS
+2024,18,18,1-18,18100,1990,0,stats_player_week_2024(1).csv,PASS
+2025,18,18,1-18,18494,2014,0,stats_player_week_2025 (1).csv,PASS
