@@ -1254,116 +1254,144 @@ def player_fit(
     overall_pick: int,
     round_number: int,
 ) -> pd.DataFrame:
-    """
-    Rank only players plausibly available at the selected overall pick.
-
-    Availability is grounded in verified ESPN ADP:
-    - Likely available: ADP at or after the selected pick
-    - Could slide: ADP up to 6 picks earlier than the selected pick
-    - Players with ADP more than 6 picks earlier are excluded
-    """
-    p = profile(rows)
+    """ADP-driven Best Player Available engine. Manager history is not used."""
     result = rankings.copy()
+    result["adp"] = pd.to_numeric(result["adp"], errors="coerce")
+    result["position_rank"] = pd.to_numeric(result["position_rank"], errors="coerce")
+    result = result.dropna(subset=["player_name", "position", "adp"]).copy()
 
-    # Exclude players whose ESPN ADP is materially earlier than this pick.
-    earliest_plausible_adp = max(1, overall_pick-6)
-    result = result[result["adp"] >= earliest_plausible_adp].copy()
+    slide_window = 5 if round_number <= 3 else 7
+    earliest_plausible_adp = max(1, overall_pick - slide_window)
+    latest_relevant_adp = overall_pick + 24
+    result = result[result["adp"].between(
+        earliest_plausible_adp, latest_relevant_adp
+    )].copy()
 
     if result.empty:
         return result
 
-    result["ADP Gap"] = result["adp"]-overall_pick
+    result["ADP Gap"] = result["adp"] - overall_pick
     result["Availability"] = np.select(
         [
             result["adp"] >= overall_pick,
-            result["adp"] >= overall_pick-3,
-            result["adp"] >= overall_pick-6,
+            result["adp"] >= overall_pick - 2,
+            result["adp"] >= earliest_plausible_adp,
         ],
-        [
-            "Likely Available",
-            "Possible Slide",
-            "Longer Shot",
-        ],
+        ["Likely Available", "Possible Slide", "Longer Shot"],
         default="Unlikely",
     )
 
-    # Closeness to the selected pick matters more than raw overall rank.
-    result["Pick Proximity"] = (
-        100-(result["adp"]-overall_pick).abs().clip(0,30)*(100/30)
-    ).clip(0,100)
+    result["ADP Proximity"] = (
+        100 - (result["adp"] - overall_pick).abs().clip(0, 24) * (100 / 24)
+    ).clip(0, 100)
 
-    bonuses = []
-    reasons = []
+    if round_number == 1:
+        result["Position Value"] = np.where(
+            result["position"].isin(["RB", "WR"]), 10, -18
+        )
+    elif round_number == 2:
+        result["Position Value"] = np.select(
+            [
+                result["position"].isin(["RB", "WR"]),
+                result["position"].eq("TE"),
+                result["position"].eq("QB"),
+            ],
+            [8, -5, -14],
+            default=0,
+        )
+    elif round_number == 3:
+        result["Position Value"] = np.select(
+            [
+                result["position"].isin(["RB", "WR"]),
+                result["position"].eq("TE"),
+                result["position"].eq("QB"),
+            ],
+            [6, 0, -9],
+            default=0,
+        )
+    elif round_number == 4:
+        result["Position Value"] = np.select(
+            [
+                result["position"].isin(["RB", "WR"]),
+                result["position"].eq("TE"),
+                result["position"].eq("QB"),
+            ],
+            [4, 1, -5],
+            default=0,
+        )
+    elif round_number <= 6:
+        result["Position Value"] = np.select(
+            [
+                result["position"].isin(["RB", "WR"]),
+                result["position"].eq("TE"),
+                result["position"].eq("QB"),
+            ],
+            [2, 2, 0],
+            default=0,
+        )
+    else:
+        result["Position Value"] = np.select(
+            [
+                result["position"].isin(["RB", "WR"]),
+                result["position"].eq("TE"),
+                result["position"].eq("QB"),
+            ],
+            [1, 2, 3],
+            default=0,
+        )
 
-    for _,player in result.iterrows():
-        bonus = 0.0
-        player_reasons = []
-
-        if player["position"] == p["best_position"]:
-            bonus += 12
-            player_reasons.append("matches your strongest drafted position")
-
-        if player["position"] == p["middle_strength"]:
-            bonus += 7
-            player_reasons.append("fits your strongest middle-round profile")
-
-        # Early rounds favor RB/WR foundation; later rounds open QB/TE value.
-        if round_number <= 3 and player["position"] in {"RB","WR"}:
-            bonus += 7
-            player_reasons.append("fits an early-round RB/WR foundation")
-        elif round_number >= 6 and player["position"] in {"QB","TE"}:
-            bonus += 3
-            player_reasons.append("reasonable later-round positional value")
-
-        availability = str(player["Availability"])
-        if availability == "Likely Available":
-            bonus += 10
-            player_reasons.append("projected available at this pick")
-        elif availability == "Possible Slide":
-            bonus += 4
-            player_reasons.append("could slide to this pick")
-        elif availability == "Longer Shot":
-            bonus -= 4
-            player_reasons.append("would need to fall past ADP")
-
-        bonuses.append(bonus)
-        reasons.append(", ".join(player_reasons) or "priced from verified 2026 ESPN ADP")
-
-    result["Historical Fit"] = bonuses
-    result["Why"] = reasons
-    result["Recommendation Score"] = (
-        .60*result["Pick Proximity"]
-        + result["Historical Fit"]
+    result["Availability Score"] = np.select(
+        [
+            result["Availability"].eq("Likely Available"),
+            result["Availability"].eq("Possible Slide"),
+            result["Availability"].eq("Longer Shot"),
+        ],
+        [8, 2, -6],
+        default=-12,
     )
 
-    # Labels are calculated only within the plausible availability pool.
-    q80 = result["Recommendation Score"].quantile(.80)
-    q50 = result["Recommendation Score"].quantile(.50)
-    q25 = result["Recommendation Score"].quantile(.25)
+    result["Recommendation Score"] = (
+        0.82 * result["ADP Proximity"]
+        + result["Position Value"]
+        + result["Availability Score"]
+    )
 
-    def fit_label(value: float) -> str:
-        if value >= q80:
-            return "Strong Fit"
-        if value >= q50:
-            return "Acceptable"
-        if value >= q25:
-            return "Risky"
-        return "Avoid at ADP"
+    result["Fit"] = np.select(
+        [
+            result["Recommendation Score"] >= 82,
+            result["Recommendation Score"] >= 70,
+            result["Recommendation Score"] >= 58,
+        ],
+        ["Best Available", "Strong Option", "Acceptable"],
+        default="Reach",
+    )
 
-    result["Fit"] = result["Recommendation Score"].apply(fit_label)
+    def explain(player: pd.Series) -> str:
+        parts = [
+            f"ESPN ADP {float(player['adp']):.1f}",
+            str(player["Availability"]).lower(),
+        ]
+        if player["position"] in {"RB", "WR"} and round_number <= 4:
+            parts.append("premium early-round position")
+        elif player["position"] == "QB" and round_number <= 3:
+            parts.append("QB cost is discounted this early")
+        elif player["position"] == "QB" and round_number >= 7:
+            parts.append("reasonable QB value range")
+        return " · ".join(parts)
 
+    result["Why"] = result.apply(explain, axis=1)
     availability_order = {
-        "Likely Available":0,
-        "Possible Slide":1,
-        "Longer Shot":2,
-        "Unlikely":3,
+        "Likely Available": 0,
+        "Possible Slide": 1,
+        "Longer Shot": 2,
+        "Unlikely": 3,
     }
     result["Availability Order"] = result["Availability"].map(availability_order)
 
     return result.sort_values(
-        ["Availability Order","Recommendation Score","adp"],
-        ascending=[True,False,True],
-    )
+        ["Recommendation Score", "Availability Order", "adp"],
+        ascending=[False, True, True],
+    ).reset_index(drop=True)
 
 
 def selected_franchise_keys(manager: str, scope: str) -> set[tuple[str,int]]:
@@ -1968,7 +1996,7 @@ elif page == "Player Fit":
         st.markdown(
             f"""
 <div class="hero-card">
-  <div class="hero-kicker">🎯 Best Fit At Pick {overall_pick}</div>
+  <div class="hero-kicker">🎯 Best Available At Pick {overall_pick}</div>
   <div class="hero-title">{top_fit['player_name']}</div>
   <div class="hero-sub">{top_fit['position']} · ESPN ADP {float(top_fit['adp']):.1f} · {top_fit['Availability']}</div>
   <div class="hero-grid">
@@ -1989,7 +2017,7 @@ elif page == "Player Fit":
         )
         fit_filter = st.selectbox(
             "Player Fit",
-            ["Strong Fit","Acceptable","Risky","Avoid at ADP","All Fits"],
+            ["Best Available","Strong Option","Acceptable","Reach","All Fits"],
             key="fit_quality_filter",
         )
         selected = fits.copy()
@@ -2005,8 +2033,10 @@ elif page == "Player Fit":
             st.markdown('<div class="card">',unsafe_allow_html=True)
             for _,player in selected.iterrows():
                 tag_class = {
-                    "Strong Fit":"","Acceptable":" blue",
-                    "Risky":" gold","Avoid at ADP":" red",
+                    "Best Available":"",
+                    "Strong Option":" blue",
+                    "Acceptable":" gold",
+                    "Reach":" red",
                 }[player["Fit"]]
                 st.markdown(
                     f"""
