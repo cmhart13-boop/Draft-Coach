@@ -56,7 +56,8 @@ jobs:
           from pathlib import Path
           s = Path('mock_draft_ui.py').read_text()
           assert 'Players are stacked by 2026 rank / ADP' in s
-          assert "st.segmented_control(\n        'Position'" in s
+          assert 'st.segmented_control(' in s
+          assert '["ALL", "QB", "RB", "WR", "TE", "D/ST", "K"]' in s
           assert 'mock-board-cell.pos-rb' in s
           assert 'mock-board-cell.pos-wr' in s
           assert 'mock-board-legend' in s
