@@ -189,28 +189,36 @@ def coach_profile(rows: pd.DataFrame) -> dict:
     early = premium[premium["round"].le(3)]["position"].value_counts()
     return {"best_round": int(eligible["Value"].idxmax()), "worst_round": int(eligible["Value"].idxmin()), "best_pos": str(pos_summary.sort_values(["Value", "Picks"], ascending=[False, False]).index[0]), "early_pos": str(early.index[0]) if not early.empty else "—"}
 
-def render_supporting_data(report: dict) -> None:
-    table = report.get("table", pd.DataFrame())
-    if table is None or table.empty:
-        return
-    with st.expander("View Supporting Data", expanded=False):
-        if {"season", "player_name"}.issubset(table.columns):
-            for _, row in table.head(100).iterrows():
-                finish = int(row["position_finish_total"]) if pd.notna(row.get("position_finish_total")) else "—"
-                points = f"{float(row['fantasy_points_ppr']):.1f}" if pd.notna(row.get("fantasy_points_ppr")) else "—"
-                ppg = f"{float(row['ppg']):.1f}" if pd.notna(row.get("ppg")) else "—"
-                games = int(row["games_played"]) if pd.notna(row.get("games_played")) else "—"
-                age = f" · Age {float(row['age']):.1f}" if pd.notna(row.get("age")) else ""
-                st.markdown(f'<div class="support-row"><div class="support-year">{int(row["season"])}</div><div><div class="support-name">{row["player_name"]} · {row.get("position", "")}</div><div class="support-meta">Finish #{finish} · {points} PPR · {ppg} PPG · {games} games{age}</div></div><div class="support-rank">#{finish}</div></div>', unsafe_allow_html=True)
-        else:
-            st.dataframe(table.head(100), use_container_width=True, hide_index=True)
-
 def render_report(report: dict) -> None:
-    st.markdown(f'<div class="report"><div class="report-title">{report.get("title", "SHIVA REPORT")}</div><div class="report-answer">{report.get("answer", "")}</div><div class="report-note">{report.get("note", "")}</div></div>', unsafe_allow_html=True)
-    takeaway = report.get("takeaway", "")
-    if takeaway:
-        st.markdown(f'<div class="takeaway"><b>🔥 DRAFT IMPACT</b><br>{takeaway}</div>', unsafe_allow_html=True)
-    render_supporting_data(report)
+    title = str(report.get("title") or "🧠 ASK SHIVA GPT").strip()
+    answer = str(report.get("answer") or "").strip()
+    why = str(
+        report.get("why")
+        or report.get("takeaway")
+        or report.get("note")
+        or ""
+    ).strip()
+
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(145deg,#17181c,#111214);border:1px solid #34363d;border-left:8px solid #31f22f;border-radius:20px;padding:24px 22px;margin:18px 0 14px;box-shadow:0 8px 28px rgba(0,0,0,.25);">
+            <div style="color:#d8d8dc;font-size:13px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">{title}</div>
+            <div style="color:#31f22f;font-size:clamp(30px,8vw,46px);line-height:1.08;font-weight:1000;letter-spacing:-.02em;white-space:pre-wrap;">{answer}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if why:
+        st.markdown(
+            f"""
+            <div style="background:linear-gradient(145deg,#1a1d1a,#121412);border:1px solid #324232;border-radius:20px;padding:22px;margin:14px 0 22px;">
+                <div style="color:#31f22f;font-size:13px;font-weight:1000;letter-spacing:.10em;text-transform:uppercase;margin-bottom:13px;">WHY</div>
+                <div style="color:#f5f5f6;font-size:17px;line-height:1.55;font-weight:600;white-space:pre-wrap;">{why}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 st.markdown('<div class="app-title">SHIVA DRAFT INTELLIGENCE</div>', unsafe_allow_html=True)
 st.markdown('<div class="nav-label">Shiva Tools</div>', unsafe_allow_html=True)
@@ -232,10 +240,10 @@ for (name, label, key), col in zip(TOOLS, st.columns(4)):
 page = st.session_state.page
 
 if page == "Shiva Intelligence":
-    st.markdown('<div class="hero"><div class="kicker">📊 Shiva Intelligence</div><div class="hero-title">Ask Shiva</div><div class="hero-sub">Every answer below is calculated from the verified 2014-2025 history, current ESPN ADP, or league draft database. No preset fantasy verdicts.</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero"><div class="kicker">📊 Shiva Intelligence</div><div class="hero-title">Ask Shiva GPT</div><div class="hero-sub">Every answer below is calculated from the verified 2014-2025 history, current ESPN ADP, or league draft database. No preset fantasy verdicts.</div></div>', unsafe_allow_html=True)
     with st.form("shiva_intelligence_form", clear_on_submit=False):
         prompt = st.text_input("What do you want to know?", placeholder="Example: What is the average PPG for top 5 RBs since 2019?", key="shiva_prompt_dynamic")
-        submitted = st.form_submit_button("Run Report", use_container_width=True)
+        submitted = st.form_submit_button("ASK SHIVA GPT", use_container_width=True)
     try:
         secret_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
     except Exception:
@@ -258,7 +266,7 @@ if page == "Shiva Intelligence":
             if entered_key.strip():
                 st.session_state["shiva_openai_api_key"] = entered_key.strip()
                 configured_api_key = entered_key.strip()
-                st.success("ChatGPT connected for this session.")
+                st.success("Shiva GPT connected for this session.")
 
     if submitted:
         if not prompt.strip():
@@ -267,7 +275,7 @@ if page == "Shiva Intelligence":
             st.error("ChatGPT needs an OpenAI API key. Add it above once, or set OPENAI_API_KEY in Streamlit Cloud Secrets for permanent use.")
         else:
             try:
-                with st.spinner("Shiva is asking ChatGPT and checking the verified data..."):
+                with st.spinner("Shiva GPT is analyzing the verified data..."):
                     st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(
                         question=prompt,
                         history=history,
