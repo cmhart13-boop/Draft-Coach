@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 from openai import OpenAI
 
-from shiva_query_router import run_shiva_query, resolve_players
+from shiva_query_router import run_shiva_query, resolve_players, resolve_players
 
 MODEL = "gpt-5.6"
 
