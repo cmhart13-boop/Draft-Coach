@@ -47,7 +47,10 @@ jobs:
         run: python scripts/mock_draft_regression.py
 
       - name: Verify live timer fragment exists
-        run: python -c "from pathlib import Path; s=Path('mock_draft_ui.py').read_text(); assert '@st.fragment(run_every=1)' in s and '_live_timer_fragment()' in s"
+        run: python -c "from pathlib import Path; s=Path('mock_draft_ui.py').read_text(); assert '@st.fragment(run_every=\"1s\")' in s and '_live_timer_fragment()' in s"
+
+      - name: Import production modules
+        run: python -c "import streamlit as st; import mock_draft_engine; import mock_draft_ui; print('Streamlit', st.__version__, 'imports OK')"
 
       - name: Compile production modules
         run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py
@@ -61,5 +64,5 @@ jobs:
             echo "Mock Draft integration already present."
             exit 0
           fi
-          git commit -m "Integrate 2026 interactive mock draft room"
+          git commit -m "Fix Streamlit mock draft timer compatibility"
           git push
