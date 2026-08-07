@@ -5,9 +5,12 @@ on:
     branches: [main]
     paths:
       - shiva_query_router.py
+      - shiva_chatgpt_service.py
+      - requirements.txt
       - espn_news_service.py
       - espn_news_cache.json
       - scripts/patch_app_query_news.py
+      - scripts/patch_ask_shiva_connection.py
       - scripts/regression_checks.py
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
@@ -28,22 +31,27 @@ jobs:
           python-version: "3.12"
 
       - name: Install test dependencies
-        run: pip install pandas numpy
+        run: pip install pandas numpy openai streamlit
 
       - name: Patch Streamlit app
-        run: python scripts/patch_app_query_news.py
+        run: |
+          python scripts/patch_app_query_news.py
+          python scripts/patch_ask_shiva_connection.py
 
       - name: Run regression checks
         run: python scripts/regression_checks.py
+
+      - name: Compile app and ChatGPT service
+        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py
 
       - name: Commit integration changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app.py shiva_query_router.py espn_news_cache.json || true
+          git add app.py shiva_query_router.py shiva_chatgpt_service.py espn_news_cache.json requirements.txt || true
           if git diff --cached --quiet; then
             echo "No integration changes to commit."
             exit 0
           fi
-          git commit -m "Integrate entity-first Shiva queries and resilient ESPN news"
+          git commit -m "Integrate resilient ChatGPT-first Ask Shiva"
           git push
