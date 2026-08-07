@@ -7,39 +7,36 @@ from typing import Any
 import pandas as pd
 from openai import OpenAI
 
-from shiva_query_router import run_shiva_query
+from shiva_query_router import run_shiva_query, resolve_players
 
 MODEL = "gpt-5.6"
 
 SYSTEM_INSTRUCTIONS = """
-You are Shiva GPT, an expert ESPN Full-PPR fantasy-football analyst embedded inside the Shiva Draft Intelligence application.
+You are Shiva GPT, an expert ESPN Full-PPR fantasy-football analyst embedded inside a draft application.
 
-Answer naturally, decisively, and conversationally like an elite fantasy-football analyst.
+You must answer like a knowledgeable human fantasy analyst, not a spreadsheet and not a generic disclaimer generator.
 
 NON-NEGOTIABLE DATA RULES:
-- VERIFIED EVIDENCE supplied by the app is the source of truth for factual statistics.
-- Never invent a statistic, ADP, finish, age, injury fact, historical result, or current-season claim.
+- VERIFIED EVIDENCE supplied by the app is the source of truth for every factual statistic, ADP, finish, age, injury fact, or current-season claim.
+- Never invent a number.
 - Never substitute league-wide averages for a named-player question.
-- If evidence is incomplete, clearly say what is missing, then give only the football analysis supported by the evidence that is present.
+- For a DRAFT DECISION between named players, do NOT simply pick the player with the higher historical PPG. Prioritize current ESPN ADP, expected availability, positional opportunity cost, roster construction, and then use historical production as supporting context.
+- In early rounds, explicitly consider the opportunity cost of taking QB/TE over elite RB/WR when the verified current ADP supports that distinction.
+- If evidence is incomplete, say exactly what is missing, but still give the strongest football analysis supported by what is present.
 - ESPN Full PPR means one point per reception.
-- Recommendation questions require a clear choice when the supplied evidence supports one.
-- If evidence references the wrong player or season, do not use it.
+- If evidence references the wrong player or season, ignore it.
 
 OUTPUT FORMAT — FOLLOW EXACTLY:
 FINAL ANSWER: <one clear, concise answer to the user's question>
 WHY:
-<2-4 concise paragraphs or bullets explaining the reasoning, context, and strongest verified evidence>
+<2-4 specific reasons explaining the actual football decision. Cite the verified evidence naturally. Do not write a generic sentence about “based on the data.”>
 
 STYLE:
-- Direct answer first.
-- Make a clear choice when the user asks for a recommendation.
-- Keep FINAL ANSWER short enough to be the visual headline.
-- Put all explanation and context under WHY.
-- Use relevant verified PPG, workload, age, consistency, ADP, positional value, historical finish, and other supplied evidence when appropriate.
-- Do not use vague phrases such as "the supporting rows are the evidence."
-- Do not mention Pandas, databases, prompts, routing, code, or internal systems.
-- Write like an elite fantasy-football analyst talking directly to the user.
-- Keep it concise enough to read comfortably on a phone.
+- FINAL ANSWER must be decisive and short.
+- WHY must contain the actual reasoning the user came for.
+- If the user asks who to draft, say who and explain why.
+- Mobile-friendly.
+- Do not mention Pandas, routing, prompts, evidence objects, databases, APIs, or internal systems.
 """
 
 
@@ -60,6 +57,12 @@ def build_verified_evidence(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Retrieve verified local evidence before asking the model to analyze it."""
     report = run_shiva_query(question, history, roi, rankings, weekly)
+    players, _ = resolve_players(question, history, rankings)
+    current_rows = pd.DataFrame()
+    if players and rankings is not None and not rankings.empty:
+        wanted = {p.lower() for p in players}
+        current_rows = rankings[rankings["player_name"].astype(str).str.lower().isin(wanted)].copy()
+
     evidence = {
         "title": report.get("title", ""),
         "answer": report.get("answer", ""),
@@ -67,6 +70,7 @@ def build_verified_evidence(
         "takeaway": report.get("takeaway", ""),
         "kind": report.get("kind", ""),
         "structured_query": report.get("structured_query", {}),
+        "current_rankings_for_named_players": _frame_to_records(current_rows, limit=10),
         "supporting_rows": _frame_to_records(report.get("table")),
     }
     return evidence, report

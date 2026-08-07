@@ -205,19 +205,64 @@ def _direct_player_report(question: str, players: list[str], history: pd.DataFra
 
     if len(players) > 1:
         table = pool.sort_values(["season", "player_name"], ascending=[False, True])
+        q_lower = question.lower()
+        is_draft_decision = bool(re.search(r"\b(?:draft|take|pick|select|round)\b", q_lower))
+
+        # Draft decisions are NOT historical-PPG contests. Use current ESPN ADP
+        # for the exact named players first, then let the analyst explain positional value.
+        if is_draft_decision:
+            current = rankings.copy()
+            current["name_key"] = current["player_name"].astype(str).map(normalize_name)
+            current = current[current["name_key"].isin(player_keys)].copy()
+            current["adp"] = pd.to_numeric(current.get("adp"), errors="coerce")
+            current = current.dropna(subset=["adp"]).sort_values("adp")
+
+            structured["intent"] = "draft_decision"
+            structured["current_adp_players"] = current["player_name"].astype(str).tolist()
+
+            if current["name_key"].nunique() == len(player_keys):
+                pick_row = current.iloc[0]
+                pick = str(pick_row["player_name"])
+                pick_adp = float(pick_row["adp"])
+                other_rows = current[current["player_name"].ne(pick)]
+                comparisons = []
+                for _, r in current.iterrows():
+                    comparisons.append(f"{r['player_name']} ({r.get('position', '—')}) — ESPN ADP {float(r['adp']):.1f}")
+                why = (
+                    f"Current ESPN ADP has {pick} at {pick_adp:.1f}, ahead of the other option(s): "
+                    + "; ".join(comparisons)
+                    + ". For an early-round draft decision, Shiva should follow current draft cost and positional opportunity cost rather than simply choosing whichever position historically scores more raw PPG."
+                )
+                combined = pd.concat([current, table], ignore_index=True, sort=False) if not table.empty else current
+                return _report(
+                    "⚖️ SHIVA DRAFT DECISION",
+                    f"I'D TAKE {pick.upper()}",
+                    why,
+                    combined,
+                    why,
+                    "draft_decision",
+                    structured,
+                )
+
+            missing = [p for p in players if normalize_name(p) not in set(current["name_key"].astype(str))]
+            why = "I can compare these players historically, but I do not have verified current ESPN ADP for " + ", ".join(missing) + ". I will not fake a current draft recommendation without it."
+            return _report("⚖️ SHIVA DRAFT DECISION", "CURRENT ADP DATA IS INCOMPLETE", why, table, why, "draft_decision", structured)
+
         if table.empty:
             return _report("⚖️ SHIVA COMPARISON", "NO MATCHING COMPARISON ROWS", "The requested players could not be matched to the selected season(s).", structured_query=structured)
+
         latest = table if not seasons else table[pd.to_numeric(table["season"], errors="coerce").isin(seasons)]
         scored = latest.dropna(subset=["ppg"]).copy()
         if not scored.empty:
             by_player = scored.groupby("player_name", as_index=False)["ppg"].mean().sort_values("ppg", ascending=False)
             pick = str(by_player.iloc[0]["player_name"])
-            answer = f"I'D TAKE {pick.upper()}"
-            note = "Among the exact players requested, Shiva compared the matching Full-PPR player-season rows."
+            answer = f"{pick.upper()} HAD THE HIGHER VERIFIED PPG"
+            detail = "; ".join(f"{r['player_name']} {float(r['ppg']):.1f} PPG" for _, r in by_player.iterrows())
+            note = f"Across the exact matching player-season rows: {detail}."
         else:
             answer = "HERE'S THE HEAD-TO-HEAD DATA"
             note = "The comparison is limited to the verified fields available for those players."
-        return _report("⚖️ SHIVA PLAYER COMPARISON", answer, note, table, "The recommendation is based only on the retrieved player records; no unrelated league-wide average was substituted.", "comparison", structured)
+        return _report("⚖️ SHIVA PLAYER COMPARISON", answer, note, table, note, "comparison", structured)
 
     player = players[0]
     season = seasons[0] if seasons else None
