@@ -1,13 +1,7 @@
 {
-  "updated_at": "2026-08-07T05:29:52.946251+00:00",
+  "updated_at": "2026-08-07T06:14:07.609594+00:00",
   "source": "ESPN JSON",
   "stories": [
-    {
-      "title": "Rookie QB Carson Beck delivers efficient debut for Cardinals",
-      "link": "https://www.espn.com/nfl/story/_/id/49550569/rookie-qb-carson-beck-delivers-efficient-debut-cardinals",
-      "summary": "Carson Beck completed 15 of 19 passes for 188 yards and a touchdown for a quarterback rating of 125.4 in the Cardinals' 33-30 loss to the Panthers in the Hall of Fame Game.",
-      "source": "ESPN"
-    },
     {
       "title": "2026 Indianapolis Colts training camp: Latest intel, updates",
       "link": "https://www.espn.com/nfl/story/_/id/49448214/indianapolis-colts-training-camp-2026-intel-updates",
@@ -21,9 +15,15 @@
       "source": "ESPN"
     },
     {
-      "title": "Sean McVay hails Aaron Donald workout as Rams await DT's call",
+      "title": "Sean McVay praises Aaron Donald as Rams await DT's decision",
       "link": "https://www.espn.com/nfl/story/_/id/49549627/sean-mcvay-praises-aaron-donald-rams-await-dt-decision",
       "summary": "Rams coach Sean McVay said Thursday he doesn't have an answer to whether Aaron Donald will come out of retirement this season but added that the former All-Pro defensive tackle \"looked outstanding\" during his workout with the team Tuesday.",
+      "source": "ESPN"
+    },
+    {
+      "title": "Highest-paid NFL players: Most guaranteed money at every position",
+      "link": "https://www.espn.com/nfl/story/_/id/34096853/highest-paid-nfl-players-tracking-most-money-guaranteed-per-year-every-position",
+      "summary": "We have seen a fair share of massive contracts in the NFL. So who tops the highest-paid list at every position as of today?",
       "source": "ESPN"
     }
   ]
