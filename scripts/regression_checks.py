@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
-import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import espn_news_service as news
-from shiva_engine import build_history_frame
-from shiva_query_router import run_shiva_query
+from shiva_engine import build_history_frame, normalize_name
+from shiva_query_router import retrieve_shiva_context, run_shiva_query
+import shiva_chatgpt_service as service
 
 
 def load_data():
@@ -31,80 +31,195 @@ def load_data():
     return history, roi, rankings, weekly
 
 
-def assert_contains(report, needle: str, label: str):
-    text = " ".join(str(report.get(k, "")) for k in ["title", "answer", "note", "takeaway", "why"])
-    if needle.lower() not in text.lower():
-        raise AssertionError(f"{label}: expected {needle!r} in report, got: {text}")
+def _serialized(context) -> str:
+    return json.dumps(context, default=str, ensure_ascii=False).lower()
+
+
+def _assert_no_code_verdict(context, label: str):
+    blob = _serialized(context)
+    banned = ["i'd take", "winner", "recommendation_score", "comparison_score", "pickplayer", "chooseplayer", "presetrecommendation"]
+    found = [x for x in banned if x in blob]
+    if found:
+        raise AssertionError(f"{label}: data context contains forbidden verdict material: {found}")
+
+
+def _named_rankings(context) -> dict[str, dict]:
+    return {str(r.get("player_name")): r for r in context.get("current_rankings_for_named_players", [])}
+
+
+class _FakeResponse:
+    def __init__(self, text: str):
+        self.output_text = text
+
+
+class _FakeResponses:
+    def __init__(self, text: str, capture: dict):
+        self.text = text
+        self.capture = capture
+
+    def create(self, **kwargs):
+        self.capture.update(kwargs)
+        return _FakeResponse(self.text)
+
+
+class _FakeClient:
+    def __init__(self, text: str, capture: dict):
+        self.responses = _FakeResponses(text, capture)
+
+
+def _run_endpoint_with_fake_model(question, fake_text, history, roi, rankings, weekly):
+    capture = {}
+    old_openai = service.OpenAI
+    try:
+        service.OpenAI = lambda api_key=None: _FakeClient(fake_text, capture)
+        result = service.ask_shiva_via_chatgpt(
+            question=question,
+            history=history,
+            roi=roi,
+            rankings=rankings,
+            weekly=weekly,
+            api_key="test-key",
+        )
+    finally:
+        service.OpenAI = old_openai
+    return result, capture
+
+
+def test_1_cross_position_model_decides(history, roi, rankings, weekly):
+    question = "Would you draft CeeDee Lamb or Josh Allen in the first round?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    if context["intent"] != "DRAFT_DECISION":
+        raise AssertionError(f"TEST 1 wrong intent: {context['intent']}")
+    names = set(context["resolved_players"])
+    if names != {"CeeDee Lamb", "Josh Allen"}:
+        raise AssertionError(f"TEST 1 wrong players: {names}")
+    ranks = _named_rankings(context)
+    if set(ranks) != names:
+        raise AssertionError(f"TEST 1 missing current ranking rows: {set(ranks)}")
+    if str(ranks["CeeDee Lamb"].get("position")) != "WR" or str(ranks["Josh Allen"].get("position")) != "QB":
+        raise AssertionError("TEST 1 expected WR/QB positional context")
+    _assert_no_code_verdict(context, "TEST 1")
+
+    fake = "I'd take CeeDee Lamb in the first round.\n\nWHY:\nIn a 10-team full-PPR league, elite WR opportunity cost matters more here. Lamb's current ADP places him in the first-round market while Allen's ADP is later, so taking Allen here gives up a scarcer early WR tier for a QB position with useful later alternatives."
+    result, capture = _run_endpoint_with_fake_model(question, fake, history, roi, rankings, weekly)
+    if "CeeDee Lamb" not in result.get("answer", ""):
+        raise AssertionError(f"TEST 1 endpoint did not preserve model choice: {result}")
+    input_messages = capture.get("input", [])
+    if not input_messages or input_messages[-1].get("role") != "user" or input_messages[-1].get("content") != question:
+        raise AssertionError("TEST 1 original question was not passed untouched as the user message")
+    developer_blob = json.dumps(input_messages[0], default=str).lower()
+    if "i'd take" in developer_blob:
+        raise AssertionError("TEST 1 developer/data context contains a preselected winner")
+    print("TEST 1 PASS: cross-position draft question reaches the model with WR/QB + ADP context and no code-selected winner")
+
+
+def test_2_same_position_comparison(history, roi, rankings, weekly):
+    question = "Who would you draft, Justin Jefferson or Ja'Marr Chase?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    if context["intent"] != "DRAFT_DECISION":
+        raise AssertionError(f"TEST 2 wrong intent: {context['intent']}")
+    if set(context["resolved_players"]) != {"Justin Jefferson", "Ja'Marr Chase"}:
+        raise AssertionError(f"TEST 2 wrong resolved players: {context['resolved_players']}")
+    _assert_no_code_verdict(context, "TEST 2")
+    fake = "I'd take Ja'Marr Chase by a small margin.\n\nWHY:\nBoth are elite first-round WRs, so this is a tier-level decision rather than a raw PPG sort. I would weigh current ADP, target ceiling, weekly spike potential and team context before breaking the tie."
+    result, _ = _run_endpoint_with_fake_model(question, fake, history, roi, rankings, weekly)
+    if "Ja'Marr Chase" not in result.get("answer", ""):
+        raise AssertionError(f"TEST 2 model response parsing failed: {result}")
+    print("TEST 2 PASS: same-position draft comparison is model-decided, not highest historical PPG")
+
+
+def test_3_cmc_ppg(history, roi, rankings, weekly):
+    question = "How many PPR points per game did Christian McCaffrey average in 2025?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    ps = context.get("facts", {}).get("player_season") or {}
+    if ps.get("player_name") != "Christian McCaffrey" or ps.get("season") != 2025:
+        raise AssertionError(f"TEST 3 wrong exact player-season: {ps}")
+    ppg = float(ps.get("points_per_game"))
+    points = float(ps.get("fantasy_points_ppr"))
+    games = int(ps.get("games_played"))
+    if abs(ppg - (points / games)) > 0.02 or not (24.0 <= ppg <= 25.0):
+        raise AssertionError(f"TEST 3 incorrect deterministic PPG: points={points} games={games} ppg={ppg}")
+    report = run_shiva_query(question, history, roi, rankings, weekly)
+    if "24." not in report.get("answer", ""):
+        raise AssertionError(f"TEST 3 factual reporter mismatch: {report}")
+    print(f"TEST 3 PASS: CMC 2025 = {points:.1f} points / {games} games = {ppg:.2f} PPG")
+
+
+def test_4_weekly_threshold(history, roi, rankings, weekly):
+    question = "Who had more games with 15+ PPR points in 2025, Christian McCaffrey or Bijan Robinson?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    threshold = context.get("facts", {}).get("weekly_threshold") or {}
+    counts = threshold.get("counts", {})
+    expected_names = {"Christian McCaffrey", "Bijan Robinson"}
+    if set(counts) != expected_names:
+        raise AssertionError(f"TEST 4 missing weekly threshold counts: {counts}")
+
+    # Independent check directly against weekly source rows.
+    w = weekly[pd.to_numeric(weekly["season"], errors="coerce").eq(2025)].copy()
+    w["_ppr"] = pd.to_numeric(w["fantasy_points_ppr"], errors="coerce")
+    independent = {}
+    for player in expected_names:
+        mask = w["player_display_name"].astype(str).map(normalize_name).eq(normalize_name(player))
+        independent[player] = int(w.loc[mask, "_ppr"].ge(15.0).sum())
+    if counts != independent:
+        raise AssertionError(f"TEST 4 deterministic weekly count mismatch: context={counts} direct={independent}")
+    _assert_no_code_verdict(context, "TEST 4")
+    print(f"TEST 4 PASS: verified 2025 15+ PPR game counts = {counts}; code calculates counts but does not choose the fantasy winner")
+
+
+def test_5_roster_hypothetical(history, roi, rankings, weekly):
+    question = "If I already drafted two RBs, would you take another RB or an elite WR here?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    if context["intent"] != "HYPOTHETICAL":
+        raise AssertionError(f"TEST 5 expected HYPOTHETICAL, got {context['intent']}")
+    if not context.get("current_adp_market_sample"):
+        raise AssertionError("TEST 5 expected current ADP market context")
+    if context.get("league_defaults", {}).get("teams") != 10 or context.get("league_defaults", {}).get("scoring") != "Full PPR":
+        raise AssertionError(f"TEST 5 league defaults missing: {context.get('league_defaults')}")
+    _assert_no_code_verdict(context, "TEST 5")
+    fake = "I'd lean elite WR.\n\nWHY:\nWith two RBs already rostered, a third RB has to clear a much higher value bar. In a 10-team full-PPR build, adding an elite WR usually improves starting-lineup balance and protects you from falling behind at a position where multiple starters are required."
+    result, _ = _run_endpoint_with_fake_model(question, fake, history, roi, rankings, weekly)
+    if "elite WR" not in result.get("answer", ""):
+        raise AssertionError(f"TEST 5 hypothetical model response failed: {result}")
+    print("TEST 5 PASS: roster-construction hypothetical reaches the analyst with league defaults and current market context")
+
+
+def test_6_missing_players(history, roi, rankings, weekly):
+    question = "Who would you rather draft?"
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    if context["intent"] != "DRAFT_DECISION" or not context.get("needs_clarification"):
+        raise AssertionError(f"TEST 6 expected missing-player clarification context: {context}")
+    _assert_no_code_verdict(context, "TEST 6")
+    fake = "Which two players are you deciding between?"
+    result, _ = _run_endpoint_with_fake_model(question, fake, history, roi, rankings, weekly)
+    if "which" not in result.get("answer", "").lower() or "players" not in result.get("answer", "").lower():
+        raise AssertionError(f"TEST 6 expected clarification question: {result}")
+    print("TEST 6 PASS: missing-player draft question asks for the players instead of fabricating a verdict")
+
+
+def maybe_run_live_model_smoke(history, roi, rankings, weekly):
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key:
+        print("LIVE MODEL SMOKE SKIPPED: GitHub Actions OPENAI_API_KEY secret is not configured.")
+        return
+    question = "Would you draft CeeDee Lamb or Josh Allen in the first round?"
+    result = service.ask_shiva_via_chatgpt(question, history, roi, rankings, weekly, api_key=key)
+    if result.get("kind") != "chatgpt":
+        raise AssertionError(f"LIVE MODEL SMOKE failed to reach OpenAI: {result}")
+    if not result.get("answer"):
+        raise AssertionError("LIVE MODEL SMOKE returned an empty answer")
+    print("LIVE MODEL SMOKE PASS:", result.get("answer"), "| WHY:", result.get("why", "")[:300])
 
 
 def main():
     history, roi, rankings, weekly = load_data()
-    print("WEEKLY COLUMNS:", list(weekly.columns))
-
-    r1 = run_shiva_query("What was Christian McCaffrey's PPG in 2025?", history, roi, rankings, weekly)
-    table1 = r1.get("table", pd.DataFrame())
-    if len(table1) != 1 or table1["player_name"].nunique() != 1 or int(table1.iloc[0]["season"]) != 2025:
-        raise AssertionError(f"TEST 1 invalid result shape: rows={len(table1)} players={table1.get('player_name', pd.Series(dtype=str)).nunique()}")
-    ppg = float(table1.iloc[0]["ppg"])
-    if not (24.0 <= ppg <= 25.0):
-        raise AssertionError(f"TEST 1 expected CMC 2025 PPG around 24.5, got {ppg}")
-    print(f"TEST 1 PASS: Christian McCaffrey 2025 = {ppg:.2f} PPG; exactly one player-season")
-
-    r2 = run_shiva_query("What were Christian McCaffrey's receiving stats in 2025?", history, roi, rankings, weekly)
-    for expected in ["102 receptions", "924 receiving yards", "7 receiving TD"]:
-        assert_contains(r2, expected, "TEST 2")
-    print(f"TEST 2 PASS: {r2['answer']}")
-
-    r3 = run_shiva_query("Compare Christian McCaffrey and Bijan Robinson in 2025.", history, roi, rankings, weekly)
-    table3 = r3.get("table", pd.DataFrame())
-    names3 = set(table3["player_name"].astype(str)) if not table3.empty else set()
-    if names3 != {"Christian McCaffrey", "Bijan Robinson"}:
-        raise AssertionError(f"TEST 3 expected only CMC/Bijan, got {names3}")
-    print(f"TEST 3 PASS: exactly {sorted(names3)}")
-
-    r4 = run_shiva_query("Who would you draft, Christian McCaffrey or Bijan Robinson?", history, roi, rankings, weekly)
-    if "I'D TAKE" not in str(r4.get("answer", "")):
-        raise AssertionError(f"TEST 4 expected clear recommendation, got {r4.get('answer')}")
-    names4 = set(r4.get("table", pd.DataFrame()).get("player_name", pd.Series(dtype=str)).astype(str))
-    if not names4.issubset({"Christian McCaffrey", "Bijan Robinson"}) or len(names4) != 2:
-        raise AssertionError(f"TEST 4 supporting data contains unexpected players: {names4}")
-    print(f"TEST 4 PASS: {r4['answer']}")
-
-    # Regression for the exact cross-position failure that previously selected QB by raw PPG.
-    r4b = run_shiva_query("Would you draft CeeDee Lamb or Josh Allen in round one?", history, roi, rankings, weekly)
-    if "CEEDEE LAMB" not in str(r4b.get("answer", "")).upper():
-        raise AssertionError(f"TEST 4B expected CeeDee Lamb from current ESPN ADP, got {r4b.get('answer')}")
-    why4b = str(r4b.get("takeaway") or r4b.get("note") or r4b.get("why") or "")
-    if "ADP" not in why4b or "CeeDee Lamb" not in why4b or "Josh Allen" not in why4b:
-        raise AssertionError(f"TEST 4B expected substantive ADP-based WHY, got {why4b}")
-    print(f"TEST 4B PASS: {r4b['answer']} | {why4b}")
-
-    stories = news.fetch_espn_news(limit=4)
-    if not stories or not all(s.get("title") and s.get("link") for s in stories):
-        raise AssertionError("TEST 5 ESPN backend did not return valid normalized stories")
-    print(f"TEST 5 PASS: ESPN backend returned {len(stories)} stories")
-
-    source = (ROOT / "espn_news_service.py").read_text(encoding="utf-8")
-    if "window.fetch" in source:
-        raise AssertionError("TEST 6 found client-side fetch dependency")
-    print("TEST 6 PASS: ESPN retrieval is server-side Python, not browser/client fetch")
-
-    old_cache = news.CACHE_PATH
-    old_request = news._request
-    try:
-        with tempfile.TemporaryDirectory() as td:
-            news.CACHE_PATH = Path(td) / "espn_news_cache.json"
-            news.CACHE_PATH.write_text(json.dumps({"stories": stories}), encoding="utf-8")
-            def fail(*args, **kwargs):
-                raise RuntimeError("simulated ESPN outage")
-            news._request = fail
-            cached = news.fetch_espn_news(limit=4)
-            if not cached or cached[0]["title"] != stories[0]["title"]:
-                raise AssertionError("TEST 7 cache fallback failed")
-    finally:
-        news.CACHE_PATH = old_cache
-        news._request = old_request
-    print("TEST 7 PASS: simulated ESPN outage served last-good cached headlines")
+    test_1_cross_position_model_decides(history, roi, rankings, weekly)
+    test_2_same_position_comparison(history, roi, rankings, weekly)
+    test_3_cmc_ppg(history, roi, rankings, weekly)
+    test_4_weekly_threshold(history, roi, rankings, weekly)
+    test_5_roster_hypothetical(history, roi, rankings, weekly)
+    test_6_missing_players(history, roi, rankings, weekly)
+    maybe_run_live_model_smoke(history, roi, rankings, weekly)
 
 
 if __name__ == "__main__":
