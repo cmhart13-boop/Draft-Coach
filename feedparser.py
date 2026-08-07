@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-"""ESPN-hardened compatibility feed parser for the Streamlit app.
+"""ESPN-compatible feed reader for the Shiva Streamlit app.
 
-This module exposes a tiny ``parse(url)`` interface compatible with the way
-``app.py`` uses feedparser.  It tries multiple ESPN transports and finally a
-Google News RSS query restricted to ESPN.com so the UI still receives ESPN
-article headlines when Streamlit Cloud cannot fetch ESPN's RSS directly.
+Primary path: read a repository-backed cache refreshed by GitHub Actions every
+15 minutes. This avoids Streamlit Cloud outbound-network failures entirely.
+If the cache is missing, fall back to direct ESPN/Google transports.
 """
 
 import json
@@ -14,15 +13,13 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-USER_AGENT = (
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 "
-    "Mobile/15E148 Safari/604.1 ShivaDraft/1.0"
-)
-
+APP_DIR = Path(__file__).resolve().parent
+CACHE_PATH = APP_DIR / "espn_news_cache.json"
+USER_AGENT = "Mozilla/5.0 ShivaDraft/1.0"
 ESPN_RSS_FALLBACKS = (
     "https://www.espn.com/espn/rss/nfl/news",
     "https://www.espn.com/espn/rss/news",
@@ -42,6 +39,23 @@ GOOGLE_ESPN_RSS = (
 )
 
 
+def _cache_entries() -> list[dict[str, str]]:
+    if not CACHE_PATH.exists():
+        return []
+    try:
+        data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        entries: list[dict[str, str]] = []
+        for story in data.get("stories", []) or []:
+            title = str(story.get("title") or "").strip()
+            link = str(story.get("link") or "").strip()
+            summary = str(story.get("summary") or "").strip()
+            if title and link:
+                entries.append({"title": title, "link": link, "summary": summary})
+        return entries
+    except Exception:
+        return []
+
+
 def _fetch(url: str, accept: str) -> bytes:
     req = urllib.request.Request(
         url,
@@ -50,8 +64,6 @@ def _fetch(url: str, accept: str) -> bytes:
             "Accept": accept,
             "Accept-Language": "en-US,en;q=0.9",
             "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "Referer": "https://www.espn.com/",
         },
     )
     with urllib.request.urlopen(req, timeout=12) as response:
@@ -73,10 +85,9 @@ def _parse_rss_bytes(payload: bytes) -> list[dict[str, str]]:
         title = _text(item, "title")
         link = _text(item, "link")
         summary = _text(item, "description")
-        if not title or not link or link in seen:
-            continue
-        seen.add(link)
-        entries.append({"title": title, "link": link, "summary": summary})
+        if title and link and link not in seen:
+            seen.add(link)
+            entries.append({"title": title, "link": link, "summary": summary})
     return entries
 
 
@@ -93,8 +104,6 @@ def _parse_espn_json(payload: bytes) -> list[dict[str, str]]:
             web = links.get("web") or {}
             if isinstance(web, dict):
                 link = str(web.get("href") or "").strip()
-        if not link:
-            link = str(article.get("link") or "").strip()
         if title and link and link not in seen:
             seen.add(link)
             entries.append({"title": title, "link": link, "summary": summary})
@@ -106,7 +115,7 @@ class _ESPNLinkParser(HTMLParser):
         super().__init__()
         self.entries: list[dict[str, str]] = []
         self._href = ""
-        self._text_parts: list[str] = []
+        self._parts: list[str] = []
         self._in_anchor = False
         self._seen: set[str] = set()
 
@@ -116,19 +125,19 @@ class _ESPNLinkParser(HTMLParser):
         href = dict(attrs).get("href") or ""
         if "/nfl/story/_/id/" in href or "/fantasy/football/story/_/id/" in href:
             self._href = href
-            self._text_parts = []
+            self._parts = []
             self._in_anchor = True
 
     def handle_data(self, data: str) -> None:
         if self._in_anchor:
             cleaned = re.sub(r"\s+", " ", data).strip()
             if cleaned:
-                self._text_parts.append(cleaned)
+                self._parts.append(cleaned)
 
     def handle_endtag(self, tag: str) -> None:
         if tag.lower() != "a" or not self._in_anchor:
             return
-        title = re.sub(r"\s+", " ", " ".join(self._text_parts)).strip()
+        title = re.sub(r"\s+", " ", " ".join(self._parts)).strip()
         href = self._href
         if href.startswith("/"):
             href = "https://www.espn.com" + href
@@ -136,69 +145,43 @@ class _ESPNLinkParser(HTMLParser):
             self._seen.add(href)
             self.entries.append({"title": title, "link": href, "summary": ""})
         self._href = ""
-        self._text_parts = []
+        self._parts = []
         self._in_anchor = False
 
 
-def _parse_espn_html(payload: bytes) -> list[dict[str, str]]:
-    parser = _ESPNLinkParser()
-    parser.feed(payload.decode("utf-8", errors="replace"))
-    return parser.entries
-
-
-def _parse_google_news(payload: bytes) -> list[dict[str, str]]:
-    entries = _parse_rss_bytes(payload)
-    cleaned: list[dict[str, str]] = []
-    for item in entries:
-        title = re.sub(r"\s+-\s+ESPN$", "", item["title"], flags=re.I).strip()
-        cleaned.append({"title": title, "link": item["link"], "summary": item.get("summary", "")})
-    return cleaned
-
-
 def parse(url: str, *args: Any, **kwargs: Any) -> SimpleNamespace:
-    tried: list[str] = []
+    cached = _cache_entries()
+    if cached:
+        return SimpleNamespace(entries=cached, bozo=False, href=str(CACHE_PATH))
 
-    # 1) Requested ESPN RSS feed, then alternate ESPN RSS feed.
-    urls = [url] + [candidate for candidate in ESPN_RSS_FALLBACKS if candidate != url]
-    for candidate in urls:
+    for candidate in [url] + [x for x in ESPN_RSS_FALLBACKS if x != url]:
         try:
-            tried.append(candidate)
-            payload = _fetch(candidate, "application/rss+xml, application/xml, text/xml, */*;q=0.8")
-            entries = _parse_rss_bytes(payload)
+            entries = _parse_rss_bytes(_fetch(candidate, "application/rss+xml, application/xml, text/xml, */*"))
             if entries:
                 return SimpleNamespace(entries=entries, bozo=False, href=candidate)
         except Exception:
             pass
 
-    # 2) ESPN's public NFL JSON news service.
     try:
-        tried.append(ESPN_NFL_JSON)
-        payload = _fetch(ESPN_NFL_JSON, "application/json, text/plain, */*")
-        entries = _parse_espn_json(payload)
+        entries = _parse_espn_json(_fetch(ESPN_NFL_JSON, "application/json, */*"))
         if entries:
             return SimpleNamespace(entries=entries, bozo=False, href=ESPN_NFL_JSON)
     except Exception:
         pass
 
-    # 3) Scrape ESPN's NFL homepage for direct ESPN article links.
     try:
-        tried.append(ESPN_NFL_PAGE)
-        payload = _fetch(ESPN_NFL_PAGE, "text/html,application/xhtml+xml,*/*;q=0.8")
-        entries = _parse_espn_html(payload)
-        if entries:
-            return SimpleNamespace(entries=entries, bozo=False, href=ESPN_NFL_PAGE)
+        parser = _ESPNLinkParser()
+        parser.feed(_fetch(ESPN_NFL_PAGE, "text/html, */*").decode("utf-8", errors="replace"))
+        if parser.entries:
+            return SimpleNamespace(entries=parser.entries, bozo=False, href=ESPN_NFL_PAGE)
     except Exception:
         pass
 
-    # 4) Final transport fallback: Google News RSS restricted to ESPN.com.
-    #    Headlines remain ESPN articles; Google only provides the RSS transport.
     try:
-        tried.append(GOOGLE_ESPN_RSS)
-        payload = _fetch(GOOGLE_ESPN_RSS, "application/rss+xml, application/xml, text/xml, */*")
-        entries = _parse_google_news(payload)
+        entries = _parse_rss_bytes(_fetch(GOOGLE_ESPN_RSS, "application/rss+xml, application/xml, text/xml, */*"))
         if entries:
             return SimpleNamespace(entries=entries, bozo=False, href=GOOGLE_ESPN_RSS)
     except Exception:
         pass
 
-    return SimpleNamespace(entries=[], bozo=True, href=url, tried=tried)
+    return SimpleNamespace(entries=[], bozo=True, href=url)
