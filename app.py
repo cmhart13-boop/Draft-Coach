@@ -303,53 +303,62 @@ else:
         st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["round"])}</div><div><div class="player">{pick["player_name"]} ({pick["position"]})</div><div class="meta">{int(pick["season"])} · {pick["league_name"]} · Pick {int(pick["overall_pick"])} · Final {pick["position_finish_total"]}</div></div><div class="tag">{float(pick["ppg"]):.1f} PPG</div></div>', unsafe_allow_html=True)
 
 # ============================================================
-# LIVE ESPN NFL NEWS FEED
+# LIVE ESPN FANTASY NEWS — DIRECT ESPN SITE API
+# No RSS, no feedparser.
 # ============================================================
-import feedparser
+import json
+import urllib.request
 from html import escape
 
-ESPN_NFL_RSS_URL = "https://www.espn.com/espn/rss/nfl/news"
+st.markdown("---")
+st.header("📰 Live ESPN Fantasy News Stream")
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_espn_news() -> list[dict[str, str]]:
-    feed = feedparser.parse(ESPN_NFL_RSS_URL)
-    stories: list[dict[str, str]] = []
-    for entry in getattr(feed, "entries", [])[:4]:
-        title = str(entry.get("title", "ESPN NFL News")).strip()
-        link = str(entry.get("link", "https://www.espn.com/fantasy/football/")).strip()
-        summary = str(entry.get("summary", "")).strip()
-        stories.append({"title": title, "link": link, "summary": summary})
-    return stories
+def load_espn_news_api() -> list[dict]:
+    """Fetch current ESPN NFL/fantasy-relevant news from ESPN's public site JSON API."""
+    api_url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=12"
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/json,text/plain,*/*",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=12) as response:
+            news_data = json.loads(response.read().decode("utf-8"))
+        articles = news_data.get("articles", []) or []
+        return articles[:4]
+    except Exception:
+        return []
 
-st.markdown("---")
-st.markdown(
-    """
-    <div style="margin:8px 0 12px 0;">
-      <div style="color:#31f22f;font-size:11px;font-weight:1000;letter-spacing:.1em;text-transform:uppercase;">📰 LIVE ESPN NFL NEWS</div>
-      <div style="color:#fff;font-size:24px;font-weight:1000;line-height:1.05;margin-top:5px;">Fantasy-Relevant Headlines</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+articles = load_espn_news_api()
+news_cols = st.columns(4)
 
-espn_stories = load_espn_news()
-if espn_stories:
-    news_cols = st.columns(4)
-    for idx, story in enumerate(espn_stories[:4]):
+if articles:
+    for idx, article in enumerate(articles[:4]):
         with news_cols[idx]:
-            safe_title = escape(story["title"])
-            safe_link = escape(story["link"], quote=True)
+            title = escape(str(article.get("headline", "Fantasy Football Update")))
+            description = escape(str(article.get("description", "Click below to read the full fantasy breakdown.")))
+
+            links_dict = article.get("links", {}) or {}
+            web_links = links_dict.get("web", {}) if isinstance(links_dict, dict) else {}
+            article_url = web_links.get("href", "https://www.espn.com/fantasy/football/") if isinstance(web_links, dict) else "https://www.espn.com/fantasy/football/"
+            article_url = escape(str(article_url), quote=True)
+
+            short_description = description[:110] + ("..." if len(description) > 110 else "")
+
             st.markdown(
                 f"""
-                <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:14px;min-height:205px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);">
-                  <div>
-                    <div style="color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">ESPN NFL</div>
-                    <div style="color:#fff;font-size:14px;font-weight:950;line-height:1.25;">{safe_title}</div>
-                  </div>
-                  <a href="{safe_link}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:14px;padding:11px 8px;border-radius:10px;background:#31f22f;color:#071007!important;text-decoration:none;text-align:center;font-size:10px;font-weight:1000;letter-spacing:.04em;">READ FULL ARTICLE</a>
+                <div style="background-color:#262730;padding:15px;border-radius:8px;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #464855;">
+                    <div>
+                        <h4 style="color:#FF4B4B;margin:0 0 10px 0;font-size:16px;font-weight:800;line-height:1.3;">{title}</h4>
+                        <p style="color:#F0F2F6;font-size:13px;line-height:1.4;font-weight:500;">{short_description}</p>
+                    </div>
+                    <a href="{article_url}" target="_blank" rel="noopener noreferrer" style="background-color:#FF4B4B;color:white!important;text-align:center;padding:8px 12px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:12px;margin-top:10px;display:block;">READ FULL ARTICLE</a>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 else:
-    st.info("ESPN headlines are temporarily unavailable. The feed will retry automatically.")
+    st.info("Unable to refresh live news feed articles from ESPN.")
