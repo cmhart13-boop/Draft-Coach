@@ -18,6 +18,7 @@ DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
 RANKINGS_PATH = APP_DIR / "current_rankings.csv"
 BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"
 WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
+WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
 SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 st.set_page_config(
