@@ -39,6 +39,7 @@ def assert_contains(report, needle: str, label: str):
 
 def main():
     history, roi, rankings, weekly = load_data()
+    print("WEEKLY COLUMNS:", list(weekly.columns))
 
     r1 = run_shiva_query("What was Christian McCaffrey's PPG in 2025?", history, roi, rankings, weekly)
     table1 = r1.get("table", pd.DataFrame())
