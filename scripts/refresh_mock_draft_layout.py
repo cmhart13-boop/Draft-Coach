@@ -17,9 +17,6 @@ new_css = r'''def _css() -> None:
 .mock-section-title{font-size:12px;font-weight:1000;color:#fff;margin:12px 0 6px}
 .mock-subtle{font-size:10px;color:#929399;line-height:1.35}
 .mock-list-head{display:grid;grid-template-columns:35px minmax(0,1fr) 48px 54px;gap:6px;align-items:center;padding:6px 8px;background:#15161a;border:1px solid #30323a;border-bottom:0;border-radius:12px 12px 0 0;color:#7f828b;font-size:8px;font-weight:1000;letter-spacing:.06em;text-transform:uppercase}
-.mock-list-row{display:grid;grid-template-columns:35px minmax(0,1fr) 48px 54px;gap:6px;align-items:center;background:#1a1b20;border:1px solid #30323a;border-top:0;padding:6px 8px;min-height:48px}
-.mock-list-row:last-child{border-radius:0 0 12px 12px}
-.mock-list-row:nth-child(odd){background:#1d1e23}
 .mock-rank{font-size:11px;color:#a2a4ab;font-weight:900;text-align:center}
 .mock-player-name{font-size:12px;color:#fff;font-weight:1000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mock-player-meta{font-size:9px;color:#929399;line-height:1.25;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -44,17 +41,15 @@ new_css = r'''def _css() -> None:
 .mock-board-legend{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 8px}.mock-legend-item{font-size:8px;font-weight:900;padding:4px 7px;border-radius:7px}
 .mock-roster-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;padding:6px 0;border-bottom:1px solid #252529}.mock-roster-slot{font-size:8px;color:#31f22f;font-weight:1000}.mock-roster-name{font-size:10px;color:#fff;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mock-queue-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}.mock-complete{background:linear-gradient(145deg,#173317,#121712);border:1px solid #31f22f;border-radius:18px;padding:18px;text-align:center;margin:12px 0}.mock-complete h2{color:#31f22f!important;margin:0}.mock-history{font-size:10px;padding:6px 0;border-bottom:1px solid #28282c;color:#ddd}.mock-controls [data-testid="stHorizontalBlock"]{gap:5px!important}.mock-view-toggle [data-testid="stHorizontalBlock"]{gap:5px!important}
 @keyframes mockPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
-/* Traditional compact player rows: kill the oversized Streamlit button feel inside the draft list. */
-div[data-testid="stHorizontalBlock"]:has(button[key^="detail_"]) {gap:4px!important;margin:0!important;padding:0!important}
 button[kind="secondary"]{transition:all .12s ease}
 @media(min-width:800px){.block-container{max-width:1180px!important}.mock-player-name{font-size:13px}.mock-board{min-width:980px}}
-@media(max-width:430px){html,body,.stApp,.block-container{max-width:100vw!important;overflow-x:hidden!important}.mock-topbar{grid-template-columns:repeat(3,minmax(0,1fr))}.mock-chip{padding:7px 5px}.mock-chip-value{font-size:13px}.mock-list-head,.mock-list-row{grid-template-columns:30px minmax(0,1fr) 42px 48px;padding-left:6px;padding-right:6px}.mock-player-name{font-size:11px}.mock-player-meta{font-size:8px}.mock-board-wrap{max-width:calc(100vw - 24px)}}
+@media(max-width:430px){html,body,.stApp,.block-container{max-width:100vw!important;overflow-x:hidden!important}.mock-topbar{grid-template-columns:repeat(3,minmax(0,1fr))}.mock-chip{padding:7px 5px}.mock-chip-value{font-size:13px}.mock-list-head{grid-template-columns:30px minmax(0,1fr) 42px 48px;padding-left:6px;padding-right:6px}.mock-player-name{font-size:11px}.mock-player-meta{font-size:8px}.mock-board-wrap{max-width:calc(100vw - 24px)}}
 </style>
 """,
         unsafe_allow_html=True,
     )'''
 
-text = re.sub(r'def _css\(\) -> None:.*?\n\ndef _state_key', new_css + '\n\n\ndef _state_key', text, flags=re.S)
+text = re.sub(r'def _css\(\) -> None:.*?\n\ndef _state_key', lambda _: new_css + '\n\n\ndef _state_key', text, flags=re.S)
 
 new_available = r'''def _render_available(state: dict[str, Any], history: pd.DataFrame, weekly: pd.DataFrame) -> None:
     st.markdown('<div class="mock-section-title">AVAILABLE PLAYERS</div>', unsafe_allow_html=True)
@@ -80,25 +75,24 @@ new_available = r'''def _render_available(state: dict[str, Any], history: pd.Dat
 
     for p in pool:
         can_draft = state['status'] == 'active' and not state['paused'] and state['currentTeam'] == state['userTeamId']
-        with st.container():
-            row = st.columns([0.45, 3.65, 0.78, 0.82, 1.0, 1.0], gap='small')
-            with row[0]:
-                st.markdown(f'<div style="padding-top:10px;text-align:center;color:#a2a4ab;font-size:11px;font-weight:900">{p["rank"]}</div>', unsafe_allow_html=True)
-            with row[1]:
-                label = f"{p['name']}\n{p['team'] or '—'}" + (f" · Bye {p['bye']}" if p.get('bye') else '')
-                if st.button(label, key=f"detail_{p['id']}", use_container_width=True):
-                    st.session_state['mock_detail_player'] = p['id']
-            with row[2]:
-                pos_cls = POSITION_CLASS.get(p['position'], '')
-                st.markdown(f'<div style="padding-top:9px"><span class="mock-pos {pos_cls}">{html.escape(p["position"])}</span></div>', unsafe_allow_html=True)
-            with row[3]:
-                st.markdown(f'<div style="padding-top:11px;color:#fff;font-size:10px;font-weight:900;text-align:center">{p["adp"]:.1f}</div>', unsafe_allow_html=True)
-            with row[4]:
-                if st.button('＋', key=f"queue_{p['id']}", help='Add to queue', use_container_width=True):
-                    queue_add(state, p['id']); st.rerun()
-            with row[5]:
-                if st.button('DRAFT', key=f"draft_{p['id']}", use_container_width=True, disabled=not can_draft):
-                    make_pick(state, p['id'], source='user'); advance_cpu_until_user(state); st.rerun()
+        row = st.columns([0.45, 3.65, 0.78, 0.82, 1.0, 1.0], gap='small')
+        with row[0]:
+            st.markdown(f'<div style="padding-top:10px;text-align:center;color:#a2a4ab;font-size:11px;font-weight:900">{p["rank"]}</div>', unsafe_allow_html=True)
+        with row[1]:
+            label = f"{p['name']}\n{p['team'] or '—'}" + (f" · Bye {p['bye']}" if p.get('bye') else '')
+            if st.button(label, key=f"detail_{p['id']}", use_container_width=True):
+                st.session_state['mock_detail_player'] = p['id']
+        with row[2]:
+            pos_cls = POSITION_CLASS.get(p['position'], '')
+            st.markdown(f'<div style="padding-top:9px"><span class="mock-pos {pos_cls}">{html.escape(p["position"])}</span></div>', unsafe_allow_html=True)
+        with row[3]:
+            st.markdown(f'<div style="padding-top:11px;color:#fff;font-size:10px;font-weight:900;text-align:center">{p["adp"]:.1f}</div>', unsafe_allow_html=True)
+        with row[4]:
+            if st.button('＋', key=f"queue_{p['id']}", help='Add to queue', use_container_width=True):
+                queue_add(state, p['id']); st.rerun()
+        with row[5]:
+            if st.button('DRAFT', key=f"draft_{p['id']}", use_container_width=True, disabled=not can_draft):
+                make_pick(state, p['id'], source='user'); advance_cpu_until_user(state); st.rerun()
 
     detail_id = st.session_state.get('mock_detail_player')
     detail = get_player(state, detail_id) if detail_id else None
@@ -106,7 +100,7 @@ new_available = r'''def _render_available(state: dict[str, Any], history: pd.Dat
         with st.expander('Player Details', expanded=True):
             _render_player_details(detail, history, weekly)'''
 
-text = re.sub(r'def _render_available\(.*?\n\ndef _render_queue', new_available + '\n\n\ndef _render_queue', text, flags=re.S)
+text = re.sub(r'def _render_available\(.*?\n\ndef _render_queue', lambda _: new_available + '\n\n\ndef _render_queue', text, flags=re.S)
 
 new_board = r'''def _render_board(state: dict[str, Any]) -> None:
     teams = int(state['settings']['teamsCount'])
@@ -152,7 +146,7 @@ new_board = r'''def _render_board(state: dict[str, Any]) -> None:
     parts.append('</div>')
     st.markdown('<div class="mock-board-wrap">' + ''.join(parts) + '</div>', unsafe_allow_html=True)'''
 
-text = re.sub(r'def _render_board\(.*?\n\ndef _render_ask_shiva', new_board + '\n\n\ndef _render_ask_shiva', text, flags=re.S)
+text = re.sub(r'def _render_board\(.*?\n\ndef _render_ask_shiva', lambda _: new_board + '\n\n\ndef _render_ask_shiva', text, flags=re.S)
 
 PATH.write_text(text)
 print('Mock Draft layout refreshed: compact traditional player list + color draft board.')
