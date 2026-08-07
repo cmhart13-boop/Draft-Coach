@@ -1,4 +1,4 @@
-name: Patch and Test Shiva
+name: Test Ask Shiva GPT
 
 on:
   push:
@@ -6,21 +6,18 @@ on:
     paths:
       - shiva_query_router.py
       - shiva_chatgpt_service.py
-      - requirements.txt
-      - espn_news_service.py
-      - espn_news_cache.json
-      - scripts/patch_app_query_news.py
-      - scripts/patch_ask_shiva_connection.py
       - scripts/regression_checks.py
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch-and-test:
+  test-ask-shiva:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,25 +30,8 @@ jobs:
       - name: Install test dependencies
         run: pip install pandas numpy openai streamlit
 
-      - name: Patch Streamlit app
-        run: |
-          python scripts/patch_app_query_news.py
-          python scripts/patch_ask_shiva_connection.py
-
-      - name: Run regression checks
+      - name: Run Ask Shiva regression checks
         run: python scripts/regression_checks.py
 
-      - name: Compile app and ChatGPT service
+      - name: Compile production Ask Shiva modules
         run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py
-
-      - name: Commit integration changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app.py shiva_query_router.py shiva_chatgpt_service.py espn_news_cache.json requirements.txt || true
-          if git diff --cached --quiet; then
-            echo "No integration changes to commit."
-            exit 0
-          fi
-          git commit -m "Integrate resilient ChatGPT-first Ask Shiva"
-          git push
