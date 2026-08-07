@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from shiva_engine import normalize_name, run_shiva_query as run_aggregate_query
@@ -12,8 +11,32 @@ MANUAL_ALIASES = {
     "cmc": "Christian McCaffrey",
 }
 
+DEFAULT_LEAGUE = {
+    "platform": "ESPN",
+    "scoring": "Full PPR",
+    "reception_points": 1.0,
+    "teams": 10,
+    "format": "redraft",
+    "draft_type": "snake",
+    "roster_construction": "standard ESPN",
+}
 
-def _report(title: str, answer: str, note: str, table: pd.DataFrame | None = None, takeaway: str = "", kind: str = "players", structured_query: dict[str, Any] | None = None) -> dict[str, Any]:
+DECISION_WORDS = re.compile(r"\b(?:draft|take|pick|select|choose|rather|would you|should i|round)\b", re.I)
+HYPOTHETICAL_WORDS = re.compile(r"\b(?:if i|if we|already drafted|roster|my team|build|start rb|start wr|hypothetical)\b", re.I)
+HISTORICAL_WORDS = re.compile(r"\b(?:historical|history|over the last|last \d+|since 20\d{2}|how often|percentage|percent|trend)\b", re.I)
+ADP_WORDS = re.compile(r"\b(?:adp|average draft position|draft cost)\b", re.I)
+COMPARISON_WORDS = re.compile(r"\b(?:compare|versus|vs\.?| or |more games|higher|better)\b", re.I)
+
+
+def _report(
+    title: str,
+    answer: str,
+    note: str,
+    table: pd.DataFrame | None = None,
+    takeaway: str = "",
+    kind: str = "facts",
+    structured_query: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "title": title,
         "answer": answer,
@@ -44,6 +67,7 @@ def _player_aliases(names: list[str]) -> dict[str, set[str]]:
         parts = re.findall(r"[A-Za-z0-9'-]+", name.lower())
         if parts:
             last_counts[parts[-1]] = last_counts.get(parts[-1], 0) + 1
+
     for name in names:
         parts = re.findall(r"[A-Za-z0-9'-]+", name.lower())
         vals = {name.lower(), normalize_name(name)}
@@ -54,6 +78,7 @@ def _player_aliases(names: list[str]) -> dict[str, set[str]]:
                 vals.add(parts[-1])
         for alias in vals:
             aliases.setdefault(alias, set()).add(name)
+
     for alias, canonical in MANUAL_ALIASES.items():
         if canonical in names:
             aliases.setdefault(alias, set()).add(canonical)
@@ -61,6 +86,7 @@ def _player_aliases(names: list[str]) -> dict[str, set[str]]:
 
 
 def resolve_players(question: str, history: pd.DataFrame, rankings: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """Resolve named players only. This function never ranks or recommends them."""
     q = question.lower()
     q_norm = normalize_name(question)
     names = _all_player_names(history, rankings)
@@ -68,16 +94,13 @@ def resolve_players(question: str, history: pd.DataFrame, rankings: pd.DataFrame
     found: list[str] = []
     ambiguous: list[str] = []
 
-    # Full-name matches take priority.
     for name in names:
         if name.lower() in q:
             found.append(name)
 
-    # Then aliases such as CMC, surname, or first-initial + surname.
     for alias, matches in aliases.items():
         if len(alias) < 3:
             continue
-        matched = False
         if " " in alias or "." in alias:
             matched = alias in q
         else:
@@ -85,15 +108,15 @@ def resolve_players(question: str, history: pd.DataFrame, rankings: pd.DataFrame
         if not matched:
             continue
         if len(matches) == 1:
-            name = next(iter(matches))
-            if name not in found:
-                found.append(name)
+            canonical = next(iter(matches))
+            if canonical not in found:
+                found.append(canonical)
         elif not any(name in found for name in matches):
             ambiguous.append(alias)
 
-    # Preserve order of appearance where possible.
+    # Preserve explicit full-name order first, then resolved aliases.
     found = sorted(set(found), key=lambda n: q.find(n.lower()) if n.lower() in q else 10_000)
-    return found, ambiguous
+    return found, sorted(set(ambiguous))
 
 
 def _metric(question: str) -> str:
@@ -122,12 +145,35 @@ def _metric(question: str) -> str:
         return "points"
     if re.search(r"\b(?:games played|games)\b", q):
         return "games"
-    if re.search(r"\b(?:adp|draft cost|average draft position)\b", q):
+    if ADP_WORDS.search(q):
         return "adp"
     return "summary"
 
 
-def _column(frame: pd.DataFrame, *candidates: str) -> str | None:
+def classify_question(question: str, players: list[str] | None = None) -> str:
+    """Classification selects data sources only. It must never determine the fantasy answer."""
+    players = players or []
+    q = question.strip()
+    if HYPOTHETICAL_WORDS.search(q):
+        return "HYPOTHETICAL"
+    if DECISION_WORDS.search(q):
+        return "DRAFT_DECISION"
+    if ADP_WORDS.search(q):
+        return "ADP_QUERY"
+    if len(players) > 1 or COMPARISON_WORDS.search(q):
+        return "PLAYER_COMPARISON"
+    if HISTORICAL_WORDS.search(q):
+        return "HISTORICAL_ANALYSIS"
+    if players:
+        return "STAT_LOOKUP"
+    if re.search(r"\b(?:average|top \d+|most|least|how many)\b", q, re.I):
+        return "TREND_ANALYSIS"
+    return "GENERAL_FANTASY"
+
+
+def _column(frame: pd.DataFrame | None, *candidates: str) -> str | None:
+    if frame is None or frame.empty:
+        return None
     lower = {str(c).lower(): c for c in frame.columns}
     for candidate in candidates:
         if candidate.lower() in lower:
@@ -135,20 +181,53 @@ def _column(frame: pd.DataFrame, *candidates: str) -> str | None:
     return None
 
 
-def _weekly_player_season(weekly: pd.DataFrame | None, player: str, season: int | None) -> pd.DataFrame:
+def _frame_records(frame: pd.DataFrame | None, limit: int = 80) -> list[dict[str, Any]]:
+    if frame is None or frame.empty:
+        return []
+    safe = frame.head(limit).copy()
+    safe = safe.astype(object).where(pd.notna(safe), None)
+    return safe.to_dict(orient="records")
+
+
+def _filter_history(history: pd.DataFrame, players: list[str], seasons: list[int]) -> pd.DataFrame:
+    if history is None or history.empty:
+        return pd.DataFrame()
+    frame = history.copy()
+    if players:
+        wanted = {normalize_name(p) for p in players}
+        frame = frame[frame["player_name"].astype(str).map(normalize_name).isin(wanted)]
+    if seasons and "season" in frame.columns:
+        frame = frame[pd.to_numeric(frame["season"], errors="coerce").isin(seasons)]
+    return frame.copy()
+
+
+def _filter_rankings(rankings: pd.DataFrame, players: list[str]) -> pd.DataFrame:
+    if rankings is None or rankings.empty:
+        return pd.DataFrame()
+    frame = rankings.copy()
+    if players:
+        wanted = {normalize_name(p) for p in players}
+        frame = frame[frame["player_name"].astype(str).map(normalize_name).isin(wanted)]
+    if "adp" in frame.columns:
+        frame["adp"] = pd.to_numeric(frame["adp"], errors="coerce")
+        frame = frame.sort_values("adp", na_position="last")
+    return frame.copy()
+
+
+def _filter_weekly(weekly: pd.DataFrame | None, players: list[str], seasons: list[int]) -> pd.DataFrame:
     if weekly is None or weekly.empty:
         return pd.DataFrame()
     name_col = _column(weekly, "player_display_name", "player_name", "name", "player")
     season_col = _column(weekly, "season", "year")
     if not name_col:
         return pd.DataFrame()
-    w = weekly.copy()
-    keys = w[name_col].astype(str).map(normalize_name)
-    w = w[keys.eq(normalize_name(player))]
-    if season is not None and season_col:
-        years = pd.to_numeric(w[season_col], errors="coerce")
-        w = w[years.eq(season)]
-    return w
+    frame = weekly.copy()
+    if players:
+        wanted = {normalize_name(p) for p in players}
+        frame = frame[frame[name_col].astype(str).map(normalize_name).isin(wanted)]
+    if seasons and season_col:
+        frame = frame[pd.to_numeric(frame[season_col], errors="coerce").isin(seasons)]
+    return frame.copy()
 
 
 def _sum_stat(frame: pd.DataFrame, *candidates: str) -> float | None:
@@ -161,190 +240,246 @@ def _sum_stat(frame: pd.DataFrame, *candidates: str) -> float | None:
     return float(values.sum())
 
 
-def _direct_player_report(question: str, players: list[str], history: pd.DataFrame, rankings: pd.DataFrame, weekly: pd.DataFrame | None) -> dict[str, Any]:
-    seasons = _season_list(question)
+def _exact_player_facts(
+    question: str,
+    players: list[str],
+    seasons: list[int],
+    history_rows: pd.DataFrame,
+    weekly_rows: pd.DataFrame,
+) -> dict[str, Any]:
+    """Deterministic calculator only. It returns facts, never a fantasy recommendation."""
+    facts: dict[str, Any] = {}
     metric = _metric(question)
-    asks_average = bool(re.search(r"\b(?:average|avg|mean|over the last|last \d+ seasons?)\b", question.lower()))
-    structured = {
-        "intent": "player_comparison" if len(players) > 1 else "player_stat",
-        "players": players,
-        "seasons": seasons,
-        "metric": metric,
-        "aggregation": "mean" if asks_average else "exact",
-        "scoring_format": "ESPN_FULL_PPR",
+
+    if len(players) == 1 and len(seasons) == 1:
+        unique_players = history_rows["player_name"].astype(str).map(normalize_name).nunique() if not history_rows.empty else 0
+        unique_seasons = pd.to_numeric(history_rows.get("season"), errors="coerce").dropna().nunique() if not history_rows.empty else 0
+        if unique_players > 1 or unique_seasons > 1:
+            facts["validation_error"] = "A one-player, one-season lookup broadened beyond the requested entity."
+            return facts
+
+        if len(history_rows) == 1:
+            row = history_rows.iloc[0]
+            facts["player_season"] = {
+                "player_name": str(row.get("player_name", players[0])),
+                "season": int(row.get("season", seasons[0])),
+                "position": row.get("position"),
+                "finish": int(row["position_finish_total"]) if pd.notna(row.get("position_finish_total")) else None,
+                "fantasy_points_ppr": float(row["fantasy_points_ppr"]) if pd.notna(row.get("fantasy_points_ppr")) else None,
+                "points_per_game": float(row["ppg"]) if pd.notna(row.get("ppg")) else None,
+                "games_played": int(row["games_played"]) if pd.notna(row.get("games_played")) else None,
+                "age": float(row["age"]) if pd.notna(row.get("age")) else None,
+            }
+
+    if len(players) == 1 and not weekly_rows.empty:
+        player = players[0]
+        season = seasons[0] if len(seasons) == 1 else None
+        weekly_totals = {
+            "player_name": player,
+            "season": season,
+            "targets": _sum_stat(weekly_rows, "targets", "receiving_targets"),
+            "receptions": _sum_stat(weekly_rows, "receptions", "receiving_receptions"),
+            "receiving_yards": _sum_stat(weekly_rows, "receiving_yards", "rec_yards"),
+            "receiving_tds": _sum_stat(weekly_rows, "receiving_tds", "receiving_touchdowns", "rec_tds"),
+            "rushing_yards": _sum_stat(weekly_rows, "rushing_yards", "rush_yards"),
+            "rushing_tds": _sum_stat(weekly_rows, "rushing_tds", "rushing_touchdowns", "rush_tds"),
+        }
+        facts["weekly_totals"] = weekly_totals
+
+    threshold_match = re.search(r"\b(\d+(?:\.\d+)?)\s*\+?\s*(?:ppr\s*)?points?\b", question, re.I)
+    if threshold_match and players and not weekly_rows.empty:
+        threshold = float(threshold_match.group(1))
+        fp_col = _column(weekly_rows, "fantasy_points_ppr")
+        name_col = _column(weekly_rows, "player_display_name", "player_name", "name", "player")
+        if fp_col and name_col:
+            temp = weekly_rows.copy()
+            temp["_ppr"] = pd.to_numeric(temp[fp_col], errors="coerce")
+            counts: dict[str, int] = {}
+            for player in players:
+                mask = temp[name_col].astype(str).map(normalize_name).eq(normalize_name(player))
+                counts[player] = int(temp.loc[mask, "_ppr"].ge(threshold).sum())
+            facts["weekly_threshold"] = {
+                "threshold_ppr_points": threshold,
+                "counts": counts,
+            }
+
+    # Keep the metric label so the model knows what the user asked the calculator to retrieve.
+    facts["requested_metric"] = metric
+    return facts
+
+
+def retrieve_shiva_context(
+    question: str,
+    history: pd.DataFrame,
+    roi: pd.DataFrame,
+    rankings: pd.DataFrame,
+    weekly: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    """Retrieve relevant verified facts. This function is intentionally verdict-free."""
+    original_question = question.strip()
+    players, ambiguous = resolve_players(original_question, history, rankings)
+    seasons = _season_list(original_question)
+    intent = classify_question(original_question, players)
+
+    history_rows = _filter_history(history, players, seasons)
+    ranking_rows = _filter_rankings(rankings, players)
+    weekly_rows = _filter_weekly(weekly, players, seasons)
+
+    context: dict[str, Any] = {
+        "original_question": original_question,
+        "intent": intent,
+        "league_defaults": dict(DEFAULT_LEAGUE),
+        "resolved_players": players,
+        "ambiguous_player_aliases": ambiguous,
+        "requested_seasons": seasons,
+        "needs_clarification": False,
+        "missing_information": [],
+        "facts": _exact_player_facts(original_question, players, seasons, history_rows, weekly_rows),
+        "current_rankings_for_named_players": _frame_records(ranking_rows, 20),
+        "historical_player_rows": _frame_records(
+            history_rows.sort_values([c for c in ["season", "player_name"] if c in history_rows.columns], ascending=False)
+            if not history_rows.empty else history_rows,
+            60,
+        ),
+        "weekly_player_rows": _frame_records(weekly_rows, 80),
     }
 
-    pool = history.copy()
-    pool["name_key"] = pool["player_name"].astype(str).map(normalize_name)
-    player_keys = {normalize_name(p) for p in players}
-    pool = pool[pool["name_key"].isin(player_keys)].copy()
-    if seasons:
-        pool = pool[pd.to_numeric(pool["season"], errors="coerce").isin(seasons)]
+    # If the question asks for a player-to-player decision but no players can be resolved,
+    # tell the model exactly what is missing. The model still produces the user-facing clarification.
+    if intent in {"DRAFT_DECISION", "PLAYER_COMPARISON"} and not players:
+        context["needs_clarification"] = True
+        context["missing_information"].append("No specific player names were resolved from the question.")
 
-    # Guardrail: a specific one-player/one-season query must never broaden to other players/seasons.
-    if len(players) == 1 and len(seasons) == 1:
-        unique_players = pool["name_key"].nunique()
-        unique_seasons = pd.to_numeric(pool["season"], errors="coerce").dropna().nunique()
-        if unique_players > 1 or unique_seasons > 1:
-            return _report(
-                "🚨 SHIVA QUERY VALIDATION",
-                "I STOPPED AN INVALID BROAD QUERY",
-                "A one-player, one-season request returned more than one player or season. Shiva refused to average unrelated records.",
-                kind="error",
-                structured_query=structured,
-            )
-
-    if pool.empty and metric not in {"receiving_stats", "rushing_stats", "targets", "receptions", "receiving_yards", "receiving_tds", "rushing_yards", "rushing_tds"}:
-        return _report(
-            "📊 SHIVA PLAYER LOOKUP",
-            "NO MATCHING PLAYER-SEASON FOUND",
-            f"I resolved the player as {players[0] if len(players)==1 else ', '.join(players)}, but the requested season record is not present in the verified history.",
-            kind="empty",
-            structured_query=structured,
+    if ambiguous:
+        context["needs_clarification"] = True
+        context["missing_information"].append(
+            "One or more player aliases are ambiguous: " + ", ".join(ambiguous)
         )
 
-    if len(players) > 1:
-        table = pool.sort_values(["season", "player_name"], ascending=[False, True])
-        q_lower = question.lower()
-        is_draft_decision = bool(re.search(r"\b(?:draft|take|pick|select|round)\b", q_lower))
+    # Draft/hypothetical questions benefit from a small market snapshot, but the code
+    # does not rank a winner or produce a recommendation.
+    if intent in {"DRAFT_DECISION", "HYPOTHETICAL", "GENERAL_FANTASY"}:
+        market = _filter_rankings(rankings, [])
+        context["current_adp_market_sample"] = _frame_records(market, 50)
 
-        # Draft decisions are NOT historical-PPG contests. Use current ESPN ADP
-        # for the exact named players first, then let the analyst explain positional value.
-        if is_draft_decision:
-            current = rankings.copy()
-            current["name_key"] = current["player_name"].astype(str).map(normalize_name)
-            current = current[current["name_key"].isin(player_keys)].copy()
-            current["adp"] = pd.to_numeric(current.get("adp"), errors="coerce")
-            current = current.dropna(subset=["adp"]).sort_values("adp")
+    # Aggregate/historical engine is permitted only as a calculator for non-decision questions.
+    # Its answer is supplied as factual context; it is never used to choose a player.
+    if not players and intent in {"HISTORICAL_ANALYSIS", "TREND_ANALYSIS", "ADP_QUERY"}:
+        try:
+            aggregate = run_aggregate_query(original_question, history, roi, rankings)
+            context["aggregate_calculation"] = {
+                "title": aggregate.get("title", ""),
+                "answer": aggregate.get("answer", ""),
+                "note": aggregate.get("note", ""),
+                "supporting_rows": _frame_records(aggregate.get("table"), 60),
+            }
+        except Exception as exc:
+            context["aggregate_calculation_error"] = str(exc)
 
-            structured["intent"] = "draft_decision"
-            structured["current_adp_players"] = current["player_name"].astype(str).tolist()
+    return context
 
-            if current["name_key"].nunique() == len(player_keys):
-                pick_row = current.iloc[0]
-                pick = str(pick_row["player_name"])
-                pick_adp = float(pick_row["adp"])
-                other_rows = current[current["player_name"].ne(pick)]
-                comparisons = []
-                for _, r in current.iterrows():
-                    comparisons.append(f"{r['player_name']} ({r.get('position', '—')}) — ESPN ADP {float(r['adp']):.1f}")
-                why = (
-                    f"Current ESPN ADP has {pick} at {pick_adp:.1f}, ahead of the other option(s): "
-                    + "; ".join(comparisons)
-                    + ". For an early-round draft decision, Shiva should follow current draft cost and positional opportunity cost rather than simply choosing whichever position historically scores more raw PPG."
-                )
-                combined = pd.concat([current, table], ignore_index=True, sort=False) if not table.empty else current
-                return _report(
-                    "⚖️ SHIVA DRAFT DECISION",
-                    f"I'D TAKE {pick.upper()}",
-                    why,
-                    combined,
-                    why,
-                    "draft_decision",
-                    structured,
-                )
 
-            missing = [p for p in players if normalize_name(p) not in set(current["name_key"].astype(str))]
-            why = "I can compare these players historically, but I do not have verified current ESPN ADP for " + ", ".join(missing) + ". I will not fake a current draft recommendation without it."
-            return _report("⚖️ SHIVA DRAFT DECISION", "CURRENT ADP DATA IS INCOMPLETE", why, table, why, "draft_decision", structured)
+def run_shiva_query(
+    question: str,
+    history: pd.DataFrame,
+    roi: pd.DataFrame,
+    rankings: pd.DataFrame,
+    weekly: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    """Compatibility factual reporter. It never makes draft recommendations."""
+    context = retrieve_shiva_context(question, history, roi, rankings, weekly)
+    facts = context.get("facts", {})
+    intent = context.get("intent", "GENERAL_FANTASY")
+    players = context.get("resolved_players", [])
+    seasons = context.get("requested_seasons", [])
 
-        if table.empty:
-            return _report("⚖️ SHIVA COMPARISON", "NO MATCHING COMPARISON ROWS", "The requested players could not be matched to the selected season(s).", structured_query=structured)
+    if context.get("needs_clarification"):
+        return _report(
+            "🧠 ASK SHIVA GPT",
+            "I NEED A LITTLE MORE CONTEXT",
+            " ".join(context.get("missing_information", [])),
+            kind="clarify",
+            structured_query=context,
+        )
 
-        latest = table if not seasons else table[pd.to_numeric(table["season"], errors="coerce").isin(seasons)]
-        scored = latest.dropna(subset=["ppg"]).copy()
-        if not scored.empty:
-            by_player = scored.groupby("player_name", as_index=False)["ppg"].mean().sort_values("ppg", ascending=False)
-            pick = str(by_player.iloc[0]["player_name"])
-            answer = f"{pick.upper()} HAD THE HIGHER VERIFIED PPG"
-            detail = "; ".join(f"{r['player_name']} {float(r['ppg']):.1f} PPG" for _, r in by_player.iterrows())
-            note = f"Across the exact matching player-season rows: {detail}."
+    ps = facts.get("player_season") or {}
+    metric = facts.get("requested_metric")
+    if ps:
+        if metric == "ppg" and ps.get("points_per_game") is not None:
+            answer = f"{ps['points_per_game']:.2f} PPG"
+            note = f"{ps['player_name']} · {ps['season']} · ESPN Full PPR · {ps.get('fantasy_points_ppr', '—')} points · {ps.get('games_played', '—')} games."
+        elif metric == "finish" and ps.get("finish") is not None:
+            answer = f"{ps.get('position', '')}{ps['finish']}"
+            note = f"{ps['player_name']} · {ps['season']}."
+        elif metric == "points" and ps.get("fantasy_points_ppr") is not None:
+            answer = f"{ps['fantasy_points_ppr']:.1f} PPR POINTS"
+            note = f"{ps['player_name']} · {ps['season']}."
         else:
-            answer = "HERE'S THE HEAD-TO-HEAD DATA"
-            note = "The comparison is limited to the verified fields available for those players."
-        return _report("⚖️ SHIVA PLAYER COMPARISON", answer, note, table, note, "comparison", structured)
+            answer = f"{ps['player_name']} · {ps['season']}"
+            note = "Exact verified player-season record retrieved."
+        return _report("📊 SHIVA PLAYER LOOKUP", answer, note, kind="fact", structured_query=context)
 
-    player = players[0]
-    season = seasons[0] if seasons else None
-
-    # Weekly-detail stats are aggregated only for the exact resolved player/season.
-    if metric in {"receiving_stats", "rushing_stats", "targets", "receptions", "receiving_yards", "receiving_tds", "rushing_yards", "rushing_tds"}:
-        w = _weekly_player_season(weekly, player, season)
-        if w.empty:
-            return _report("📊 SHIVA PLAYER LOOKUP", "DETAILED WEEKLY STATS ARE NOT AVAILABLE FOR THAT MATCH", f"I found the player identity, but the weekly dataset did not contain a matching {season or ''} row set for {player}.", pool, structured_query=structured)
-        stats = {
-            "targets": _sum_stat(w, "targets", "receiving_targets"),
-            "receptions": _sum_stat(w, "receptions", "receiving_receptions"),
-            "receiving_yards": _sum_stat(w, "receiving_yards", "rec_yards"),
-            "receiving_tds": _sum_stat(w, "receiving_tds", "receiving_touchdowns", "rec_tds"),
-            "rushing_yards": _sum_stat(w, "rushing_yards", "rush_yards"),
-            "rushing_tds": _sum_stat(w, "rushing_tds", "rushing_touchdowns", "rush_tds"),
+    totals = facts.get("weekly_totals") or {}
+    if totals and len(players) == 1:
+        metric_map = {
+            "targets": ("targets", "TARGETS"),
+            "receptions": ("receptions", "RECEPTIONS"),
+            "receiving_yards": ("receiving_yards", "RECEIVING YARDS"),
+            "receiving_tds": ("receiving_tds", "RECEIVING TD"),
+            "rushing_yards": ("rushing_yards", "RUSHING YARDS"),
+            "rushing_tds": ("rushing_tds", "RUSHING TD"),
         }
         if metric == "receiving_stats":
-            parts = [
-                f"{int(stats['receptions'])} receptions" if stats['receptions'] is not None else None,
-                f"{int(stats['receiving_yards'])} receiving yards" if stats['receiving_yards'] is not None else None,
-                f"{int(stats['receiving_tds'])} receiving TD" if stats['receiving_tds'] is not None else None,
-            ]
-            answer = " · ".join(x for x in parts if x) or "NO VERIFIED RECEIVING TOTALS"
-        elif metric == "rushing_stats":
-            parts = [
-                f"{int(stats['rushing_yards'])} rushing yards" if stats['rushing_yards'] is not None else None,
-                f"{int(stats['rushing_tds'])} rushing TD" if stats['rushing_tds'] is not None else None,
-            ]
-            answer = " · ".join(x for x in parts if x) or "NO VERIFIED RUSHING TOTALS"
-        else:
-            value = stats.get(metric)
-            answer = f"{int(value)} {metric.replace('_', ' ').upper()}" if value is not None else f"NO VERIFIED {metric.replace('_', ' ').upper()}"
-        return _report("📊 SHIVA PLAYER LOOKUP", answer, f"{player}{f' · {season}' if season else ''}. Totals come from only that player's matching weekly rows.", pool, "Exact player routing was applied before any aggregation.", "player", structured)
+            answer = " · ".join(
+                x for x in [
+                    f"{int(totals['receptions'])} receptions" if totals.get("receptions") is not None else None,
+                    f"{int(totals['receiving_yards'])} receiving yards" if totals.get("receiving_yards") is not None else None,
+                    f"{int(totals['receiving_tds'])} receiving TD" if totals.get("receiving_tds") is not None else None,
+                ] if x
+            )
+            return _report("📊 SHIVA PLAYER LOOKUP", answer or "NO VERIFIED RECEIVING TOTALS", f"{players[0]} · {seasons[0] if seasons else 'requested span'}.", kind="fact", structured_query=context)
+        if metric in metric_map:
+            key, label = metric_map[metric]
+            value = totals.get(key)
+            answer = f"{int(value)} {label}" if value is not None else f"NO VERIFIED {label}"
+            return _report("📊 SHIVA PLAYER LOOKUP", answer, f"{players[0]} · {seasons[0] if seasons else 'requested span'}.", kind="fact", structured_query=context)
 
-    valid = pool.copy()
-    if len(valid) == 1 and not asks_average:
-        row = valid.iloc[0]
-        finish = row.get("position_finish_total")
-        pos = str(row.get("position", ""))
-        if metric == "finish" and pd.notna(finish):
-            answer = f"{pos}{int(finish)}"
-            note = f"{player} finished as {pos}{int(finish)} in {int(row['season'])}."
-        elif metric == "ppg" and pd.notna(row.get("ppg")):
-            answer = f"{float(row['ppg']):.2f} PPG"
-            note = f"{player} · {int(row['season'])} · ESPN Full PPR · {int(row['games_played']) if pd.notna(row.get('games_played')) else '—'} games."
-        elif metric == "points" and pd.notna(row.get("fantasy_points_ppr")):
-            answer = f"{float(row['fantasy_points_ppr']):.1f} PPR POINTS"
-            note = f"{player} · {int(row['season'])}."
-        elif metric == "games" and pd.notna(row.get("games_played")):
-            answer = f"{int(row['games_played'])} GAMES"
-            note = f"{player} · {int(row['season'])}."
-        elif metric == "adp" and pd.notna(row.get("overall_pick")):
-            answer = f"PICK {float(row['overall_pick']):.1f}"
-            note = f"Historical draft cost for {player} in {int(row['season'])}."
-        else:
-            answer = f"{player.upper()} · {int(row['season'])}"
-            note = "Exact player-season record retrieved."
-        return _report("📊 SHIVA PLAYER LOOKUP", answer, note, valid, "This result is from one canonical player-season record, not a league-wide average.", "player", structured)
-
-    if metric == "ppg" and not valid.dropna(subset=["ppg"]).empty:
-        answer = f"{valid['ppg'].mean():.2f} PPG"
-    elif metric == "points" and not valid.dropna(subset=["fantasy_points_ppr"]).empty:
-        answer = f"{valid['fantasy_points_ppr'].mean():.1f} PPR POINTS"
-    elif metric == "games" and not valid.dropna(subset=["games_played"]).empty:
-        answer = f"{valid['games_played'].mean():.1f} GAMES"
-    else:
-        answer = f"{len(valid)} MATCHING {player.upper()} SEASONS"
-    return _report("📊 SHIVA PLAYER REPORT", answer, f"Only {player}'s matching player-season rows were used.", valid, "Ask for a specific season to get a single-season result, or ask for an average to intentionally combine seasons.", "player", structured)
-
-
-def run_shiva_query(question: str, history: pd.DataFrame, roi: pd.DataFrame, rankings: pd.DataFrame, weekly: pd.DataFrame | None = None) -> dict[str, Any]:
-    """Entity-first query router. Specific players are resolved before any aggregate intent."""
-    q = re.sub(r"\s+", " ", question.strip())
-    players, ambiguous = resolve_players(q, history, rankings)
-    if ambiguous and not players:
+    threshold = facts.get("weekly_threshold")
+    if threshold:
+        details = "; ".join(f"{name}: {count}" for name, count in threshold["counts"].items())
         return _report(
-            "📊 SHIVA PLAYER LOOKUP",
-            "WHICH PLAYER DID YOU MEAN?",
-            "That name could match more than one player in the database. Use the full player name so Shiva does not merge different players.",
-            kind="clarify",
+            "📊 SHIVA WEEKLY SCORING",
+            details,
+            f"Games at or above {threshold['threshold_ppr_points']:.0f} ESPN Full-PPR points.",
+            kind="fact",
+            structured_query=context,
         )
-    if players:
-        return _direct_player_report(q, players, history, rankings, weekly)
-    return run_aggregate_query(q, history, roi, rankings)
+
+    if "aggregate_calculation" in context:
+        agg = context["aggregate_calculation"]
+        return _report(
+            agg.get("title") or "📊 SHIVA DATA REPORT",
+            agg.get("answer") or "CALCULATION COMPLETE",
+            agg.get("note") or "",
+            kind="fact",
+            structured_query=context,
+        )
+
+    # This is deliberate: decision/opinion questions are not answered in code.
+    if intent in {"DRAFT_DECISION", "PLAYER_COMPARISON", "HYPOTHETICAL", "GENERAL_FANTASY"}:
+        names = ", ".join(players) if players else "the requested scenario"
+        return _report(
+            "🧠 ASK SHIVA GPT",
+            "SHIVA GPT ANALYSIS REQUIRED",
+            f"Verified context was retrieved for {names}. The application code intentionally does not choose a winner; the OpenAI analyst must make the recommendation.",
+            kind="analysis_required",
+            structured_query=context,
+        )
+
+    return _report(
+        "📊 SHIVA DATA REPORT",
+        "NO VERIFIED CALCULATION WAS AVAILABLE",
+        "Shiva GPT can still analyze the question, but it must not invent missing statistics.",
+        kind="empty",
+        structured_query=context,
+    )
