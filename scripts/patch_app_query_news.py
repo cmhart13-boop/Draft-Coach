@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
+ROUTER = ROOT / "shiva_query_router.py"
 text = APP.read_text(encoding="utf-8")
 
 text = text.replace(
@@ -16,9 +17,8 @@ text = text.replace(
 
 needle = '''@st.cache_data(show_spinner=False)\ndef load_births() -> pd.DataFrame:\n    if not BIRTH_DATES_PATH.exists():\n        return pd.DataFrame(columns=["name_key", "birth_date"])\n    df = pd.read_csv(BIRTH_DATES_PATH)\n    df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")\n    return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")\n\nroi = load_roi()\nrankings = load_rankings()\nbirths = load_births()\n'''
 replacement = '''@st.cache_data(show_spinner=False)\ndef load_births() -> pd.DataFrame:\n    if not BIRTH_DATES_PATH.exists():\n        return pd.DataFrame(columns=["name_key", "birth_date"])\n    df = pd.read_csv(BIRTH_DATES_PATH)\n    df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")\n    return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")\n\n@st.cache_data(show_spinner=False)\ndef load_weekly() -> pd.DataFrame:\n    if not WEEKLY_PATH.exists():\n        return pd.DataFrame()\n    return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")\n\nroi = load_roi()\nrankings = load_rankings()\nbirths = load_births()\nweekly = load_weekly()\n'''
-if needle not in text:
-    raise SystemExit("Could not locate load_births block")
-text = text.replace(needle, replacement)
+if needle in text:
+    text = text.replace(needle, replacement)
 
 text = text.replace(
     'run_shiva_query(prompt, history, roi, rankings)',
@@ -26,10 +26,9 @@ text = text.replace(
 )
 
 marker = "# ============================================================\n# LIVE ESPN FANTASY NEWS — DIRECT ESPN SITE API\n"
-if marker not in text:
-    raise SystemExit("Could not locate ESPN news block")
-prefix = text.split(marker, 1)[0].rstrip() + "\n\n"
-news = r'''# ============================================================
+if marker in text:
+    prefix = text.split(marker, 1)[0].rstrip() + "\n\n"
+    news = r'''# ============================================================
 # LIVE ESPN FANTASY NEWS — SERVER-SIDE SERVICE + LAST-GOOD CACHE
 # ============================================================
 from html import escape
@@ -77,6 +76,14 @@ if articles:
 else:
     st.info("ESPN news could not be refreshed and no last-good cached headlines are available yet. The backend logs contain the request/parsing failure details.")
 '''
+    text = prefix + news
 
-APP.write_text(prefix + news, encoding="utf-8")
-print("Patched app.py for entity-first Shiva routing and backend ESPN service")
+APP.write_text(text, encoding="utf-8")
+
+router = ROUTER.read_text(encoding="utf-8")
+router = router.replace(
+    'name_col = _column(weekly, "player_name", "player_display_name", "name", "player")',
+    'name_col = _column(weekly, "player_display_name", "player_name", "name", "player")',
+)
+ROUTER.write_text(router, encoding="utf-8")
+print("Patched app.py plus detailed weekly player-name resolution")
