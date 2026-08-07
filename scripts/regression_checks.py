@@ -23,7 +23,7 @@ def load_data():
     rankings = pd.read_csv(ROOT / "current_rankings.csv")
     births = pd.read_csv(ROOT / "player_birth_dates.csv")
     births["birth_date"] = pd.to_datetime(births["birth_date"], errors="coerce")
-    weekly = pd.read_csv(ROOT / "weekly_player_ppr.csv", low_memory=False)
+    weekly = pd.read_csv(ROOT / "player_weekly_master_2014_2025.csv.gz", low_memory=False, compression="gzip")
     for col in ["season", "round", "overall_pick", "position_draft_rank", "position_finish_total", "fantasy_points_ppr", "ppg", "games_played", "final_draft_roi"]:
         if col in roi.columns:
             roi[col] = pd.to_numeric(roi[col], errors="coerce")
