@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import math
+import os
 import sqlite3
 from pathlib import Path
 
@@ -235,29 +236,48 @@ if page == "Shiva Intelligence":
     with st.form("shiva_intelligence_form", clear_on_submit=False):
         prompt = st.text_input("What do you want to know?", placeholder="Example: What is the average PPG for top 5 RBs since 2019?", key="shiva_prompt_dynamic")
         submitted = st.form_submit_button("Run Report", use_container_width=True)
+    try:
+        secret_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+    except Exception:
+        secret_key = ""
+    configured_api_key = (
+        str(os.environ.get("OPENAI_API_KEY", "")).strip()
+        or secret_key
+        or str(st.session_state.get("shiva_openai_api_key", "")).strip()
+    )
+
+    if not configured_api_key:
+        with st.expander("Connect ChatGPT", expanded=True):
+            entered_key = st.text_input(
+                "OpenAI API key",
+                type="password",
+                placeholder="sk-...",
+                help="Used only for this browser session. For permanent use, add OPENAI_API_KEY in Streamlit Cloud Secrets.",
+                key="shiva_openai_api_key_input",
+            )
+            if entered_key.strip():
+                st.session_state["shiva_openai_api_key"] = entered_key.strip()
+                configured_api_key = entered_key.strip()
+                st.success("ChatGPT connected for this session.")
+
     if submitted:
-        if prompt.strip():
+        if not prompt.strip():
+            st.warning("Type a question first.")
+        elif not configured_api_key:
+            st.error("ChatGPT needs an OpenAI API key. Add it above once, or set OPENAI_API_KEY in Streamlit Cloud Secrets for permanent use.")
+        else:
             try:
-                api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
-            except Exception:
-                api_key = ""
-            try:
-                with st.spinner("Shiva is analyzing the verified data..."):
+                with st.spinner("Shiva is asking ChatGPT and checking the verified data..."):
                     st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(
                         question=prompt,
                         history=history,
                         roi=roi,
                         rankings=rankings,
                         weekly=weekly,
-                        api_key=api_key or None,
+                        api_key=configured_api_key,
                     )
-            except Exception:
-                # Last-resort verified local engine: Ask Shiva must never die on the user.
-                st.session_state["shiva_report_dynamic"] = run_shiva_query(
-                    prompt, history, roi, rankings, weekly
-                )
-        else:
-            st.warning("Type a question first.")
+            except Exception as exc:
+                st.error(f"ChatGPT connection failed: {exc}")
     report = st.session_state.get("shiva_report_dynamic")
     if report:
         render_report(report)
