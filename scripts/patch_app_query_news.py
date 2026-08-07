@@ -11,11 +11,11 @@ text = text.replace(
 
 text = text.replace(
     'BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"\n',
-    'BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"\nWEEKLY_PATH = APP_DIR / "weekly_player_ppr.csv"\n',
+    'BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"\nWEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"\n',
 )
 
 needle = '''@st.cache_data(show_spinner=False)\ndef load_births() -> pd.DataFrame:\n    if not BIRTH_DATES_PATH.exists():\n        return pd.DataFrame(columns=["name_key", "birth_date"])\n    df = pd.read_csv(BIRTH_DATES_PATH)\n    df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")\n    return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")\n\nroi = load_roi()\nrankings = load_rankings()\nbirths = load_births()\n'''
-replacement = '''@st.cache_data(show_spinner=False)\ndef load_births() -> pd.DataFrame:\n    if not BIRTH_DATES_PATH.exists():\n        return pd.DataFrame(columns=["name_key", "birth_date"])\n    df = pd.read_csv(BIRTH_DATES_PATH)\n    df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")\n    return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")\n\n@st.cache_data(show_spinner=False)\ndef load_weekly() -> pd.DataFrame:\n    if not WEEKLY_PATH.exists():\n        return pd.DataFrame()\n    return pd.read_csv(WEEKLY_PATH, low_memory=False)\n\nroi = load_roi()\nrankings = load_rankings()\nbirths = load_births()\nweekly = load_weekly()\n'''
+replacement = '''@st.cache_data(show_spinner=False)\ndef load_births() -> pd.DataFrame:\n    if not BIRTH_DATES_PATH.exists():\n        return pd.DataFrame(columns=["name_key", "birth_date"])\n    df = pd.read_csv(BIRTH_DATES_PATH)\n    df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")\n    return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")\n\n@st.cache_data(show_spinner=False)\ndef load_weekly() -> pd.DataFrame:\n    if not WEEKLY_PATH.exists():\n        return pd.DataFrame()\n    return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")\n\nroi = load_roi()\nrankings = load_rankings()\nbirths = load_births()\nweekly = load_weekly()\n'''
 if needle not in text:
     raise SystemExit("Could not locate load_births block")
 text = text.replace(needle, replacement)
