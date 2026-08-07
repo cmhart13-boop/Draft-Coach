@@ -112,7 +112,6 @@ new_comparison = '''    if len(players) > 1:
                 pick_row = current.iloc[0]
                 pick = str(pick_row["player_name"])
                 pick_adp = float(pick_row["adp"])
-                other_rows = current[current["player_name"].ne(pick)]
                 comparisons = []
                 for _, r in current.iterrows():
                     comparisons.append(f"{r['player_name']} ({r.get('position', '—')}) — ESPN ADP {float(r['adp']):.1f}")
@@ -153,9 +152,10 @@ new_comparison = '''    if len(players) > 1:
         return _report("⚖️ SHIVA PLAYER COMPARISON", answer, note, table, note, "comparison", structured)
 '''
 
-if old_comparison not in router:
-    raise RuntimeError("Could not locate the old comparison block in shiva_query_router.py")
-router = router.replace(old_comparison, new_comparison)
+if old_comparison in router:
+    router = router.replace(old_comparison, new_comparison)
+elif 'structured["intent"] = "draft_decision"' not in router:
+    raise RuntimeError("Could not locate or verify the draft-comparison block in shiva_query_router.py")
 ROUTER.write_text(router, encoding="utf-8")
 
 # ============================================================
@@ -201,7 +201,6 @@ STYLE:
     flags=re.DOTALL,
 )
 
-# Add exact current ranking rows for named players into ChatGPT evidence.
 old_evidence_tail = '''    evidence = {
         "title": report.get("title", ""),
         "answer": report.get("answer", ""),
@@ -234,7 +233,6 @@ new_evidence_tail = '''    players, _ = resolve_players(question, history, ranki
 if old_evidence_tail in service:
     service = service.replace(old_evidence_tail, new_evidence_tail)
 
-# Never replace a missing WHY with the generic sentence the user explicitly rejected.
 service = service.replace(
     '"why": why or "This recommendation is based on the verified Shiva evidence retrieved for your question.",',
     '"why": why or str(local_report.get("takeaway") or local_report.get("note") or "").strip(),',
