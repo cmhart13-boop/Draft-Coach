@@ -1,0 +1,40 @@
+name: Update ESPN News Cache
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - espn_news_cache.json
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-news:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch ESPN headlines
+        run: python scripts/update_espn_news.py
+
+      - name: Commit refreshed cache
+        run: |
+          if git diff --quiet -- espn_news_cache.json; then
+            echo "No news cache changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add espn_news_cache.json
+          git commit -m "Refresh ESPN news cache"
+          git push
