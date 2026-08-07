@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 import pandas as pd
@@ -59,6 +60,7 @@ LIVE DRAFT:
 - Use the centralized draft context when present.
 - Never recommend a drafted/unavailable player.
 - Use current pick, next user pick, roster, opponent rosters, queue, recent selections, remaining tiers and positional scarcity.
+- Use LIVE CANDIDATE EVIDENCE for recent player history and weekly consistency when it is supplied. Weekly consistency is evidence, not an automatic winner rule.
 - When the user asks "Who should I pick?", treat it as a complete live decision request. Do not ask them to restate their roster or available players if that information exists in the supplied draft context.
 - Compare a short set of realistic candidates from the actual available board and choose one.
 - Explain why the recommended player fits THIS roster at THIS pick, and identify the most important alternative or tradeoff when useful.
@@ -76,7 +78,7 @@ STYLE:
 - Answer the exact original question.
 - Mobile-first: concise, decisive, useful.
 - For a fact question: answer the number/result first, then one short supporting sentence.
-- For a live "Who should I pick?" decision: lead with "Pick: PLAYER" followed by 2-5 concise reasons tied to roster fit, board value, scarcity and next-pick consequences.
+- For a live "Who should I pick?" decision: lead with "Pick: PLAYER" followed by 2-5 concise reasons tied to roster fit, board value, scarcity, weekly usability and next-pick consequences.
 - For another decision: start with the pick you would make, then 2-5 concise reasons.
 - Do not mention prompts, routing code, Pandas, JSON, APIs, or internal architecture.
 """
@@ -88,6 +90,90 @@ GENERIC_WHY_PHRASES = (
     "retrieved player records",
     "verified shiva evidence",
 )
+
+
+def _norm_name(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
+def _records(frame: pd.DataFrame | None, limit: int) -> list[dict[str, Any]]:
+    if frame is None or frame.empty:
+        return []
+    safe = frame.head(limit).copy()
+    safe = safe.astype(object).where(pd.notna(safe), None)
+    return safe.to_dict(orient="records")
+
+
+def _live_candidate_evidence(
+    history: pd.DataFrame,
+    weekly: pd.DataFrame | None,
+    decision: dict[str, Any],
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Attach verified recent history/weekly usability for realistic live-board candidates only."""
+    signals = list(decision.get("board_signals") or [])[:limit]
+    if not signals:
+        return []
+
+    history_frame = history if history is not None else pd.DataFrame()
+    weekly_frame = weekly if weekly is not None else pd.DataFrame()
+    history_name_col = "player_name" if "player_name" in history_frame.columns else None
+    weekly_name_col = next((c for c in ("player_display_name", "player_name", "name") if c in weekly_frame.columns), None)
+    weekly_season_col = "season" if "season" in weekly_frame.columns else None
+    weekly_points_col = "fantasy_points_ppr" if "fantasy_points_ppr" in weekly_frame.columns else None
+
+    output: list[dict[str, Any]] = []
+    for signal in signals:
+        name = str(signal.get("player_name") or "")
+        key = _norm_name(name)
+        item: dict[str, Any] = {
+            "player_name": name,
+            "position": signal.get("position"),
+            "adp": signal.get("adp"),
+            "shiva_rank": signal.get("shiva_rank"),
+            "pick_value": signal.get("pick_value"),
+            "availability_next_pick": signal.get("availability_next_pick"),
+            "historical_price_risk": signal.get("historical_price_risk") or {},
+        }
+
+        if history_name_col:
+            h = history_frame[history_frame[history_name_col].astype(str).map(_norm_name).eq(key)].copy()
+            if not h.empty:
+                sort_cols = [c for c in ("season", "overall_pick") if c in h.columns]
+                if sort_cols:
+                    h = h.sort_values(sort_cols, ascending=[False] * len(sort_cols))
+                keep = [c for c in (
+                    "season", "position", "fantasy_points_ppr", "ppg", "games_played",
+                    "position_finish_total", "overall_pick", "round", "league_name", "manager_name",
+                ) if c in h.columns]
+                item["recent_history"] = _records(h[keep] if keep else h, 4)
+
+        if weekly_name_col and weekly_season_col and weekly_points_col:
+            w = weekly_frame[weekly_frame[weekly_name_col].astype(str).map(_norm_name).eq(key)].copy()
+            if not w.empty:
+                w[weekly_season_col] = pd.to_numeric(w[weekly_season_col], errors="coerce")
+                w[weekly_points_col] = pd.to_numeric(w[weekly_points_col], errors="coerce")
+                w = w.dropna(subset=[weekly_season_col, weekly_points_col])
+                consistency: list[dict[str, Any]] = []
+                for season, grp in w.groupby(weekly_season_col):
+                    season_int = int(season)
+                    if season_int < 2023:
+                        continue
+                    pts = grp[weekly_points_col].dropna()
+                    if pts.empty:
+                        continue
+                    consistency.append({
+                        "season": season_int,
+                        "games": int(len(pts)),
+                        "ppg": round(float(pts.mean()), 2),
+                        "15_plus_games": int((pts >= 15).sum()),
+                        "20_plus_games": int((pts >= 20).sum()),
+                        "under_10_games": int((pts < 10).sum()),
+                    })
+                item["weekly_consistency"] = sorted(consistency, key=lambda r: r["season"], reverse=True)[:3]
+
+        output.append(item)
+    return output
 
 
 def build_verified_evidence(
@@ -109,6 +195,7 @@ def build_verified_evidence(
     return {
         "verified_facts": facts,
         "draft_decision_context": decision,
+        "live_candidate_evidence": _live_candidate_evidence(history, weekly, decision) if draft_context else [],
     }
 
 
@@ -127,7 +214,6 @@ def _clean_explanation(text: str) -> str:
 
 
 def re_search_why(text: str) -> tuple[int, int] | None:
-    import re
     match = re.search(r"(?im)^\s*(?:WHY|HERE'S WHY)\s*:\s*", text)
     if not match:
         return None
