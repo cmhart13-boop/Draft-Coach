@@ -1,14 +1,9 @@
 from pathlib import Path
+import re
 
 path = Path('app.py')
 text = path.read_text()
 
-old_loader = '''@st.cache_data(show_spinner=False)
-def load_weekly() -> pd.DataFrame:
-    if not WEEKLY_PATH.exists():
-        return pd.DataFrame()
-    return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")
-'''
 optimized_loader = '''@st.cache_resource(show_spinner=False)
 def load_weekly() -> pd.DataFrame:
     """Load only weekly columns actually used by Shiva/Mock Draft.
@@ -36,37 +31,31 @@ def load_weekly() -> pd.DataFrame:
     )
 '''
 
-if old_loader in text:
-    text = text.replace(old_loader, optimized_loader, 1)
-elif optimized_loader not in text:
-    raise SystemExit('weekly loader shape changed; refusing unsafe patch')
+# Replace any existing load_weekly implementation, regardless of previous optimization wording.
+pattern = re.compile(
+    r'@st\.cache_(?:data|resource)\(show_spinner=False\)\ndef load_weekly\(\) -> pd\.DataFrame:\n.*?(?=\nroi = load_roi\(\))',
+    re.S,
+)
+text, count = pattern.subn(optimized_loader.rstrip(), text, count=1)
+if count != 1:
+    raise SystemExit('load_weekly block not found; refusing unsafe patch')
 
-# Do NOT expand the large weekly dataset on every page load.
+# Do NOT expand the large weekly dataset on every app page load.
 text = text.replace('weekly = load_weekly()\nfor col in [', 'weekly = None\nfor col in [', 1)
 
 # Shiva Intelligence loads weekly data only when a question is actually submitted.
-shiva_old = '''                        weekly=weekly,
-                        api_key=configured_api_key,
-'''
-shiva_new = '''                        weekly=load_weekly(),
-                        api_key=configured_api_key,
-'''
-if shiva_old in text:
-    text = text.replace(shiva_old, shiva_new, 1)
+text = text.replace(
+    '                        weekly=weekly,\n                        api_key=configured_api_key,\n',
+    '                        weekly=load_weekly(),\n                        api_key=configured_api_key,\n',
+    1,
+)
 
-# Mock Draft needs only the optimized shared weekly frame when that page is opened.
-mock_old = '''        weekly=weekly,
-        history=history,
-        roi=roi,
-        db_path=DB_PATH,
-'''
-mock_new = '''        weekly=load_weekly(),
-        history=history,
-        roi=roi,
-        db_path=DB_PATH,
-'''
-if mock_old in text:
-    text = text.replace(mock_old, mock_new, 1)
+# Mock Draft loads the optimized shared weekly frame only when that page is opened.
+text = text.replace(
+    '        weekly=weekly,\n        history=history,\n        roi=roi,\n        db_path=DB_PATH,\n',
+    '        weekly=load_weekly(),\n        history=history,\n        roi=roi,\n        db_path=DB_PATH,\n',
+    1,
+)
 
 path.write_text(text)
 print('Optimized Streamlit memory: selective shared weekly data + lazy page loading.')
