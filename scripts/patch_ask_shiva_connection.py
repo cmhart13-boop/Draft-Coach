@@ -1,26 +1,81 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 text = APP.read_text(encoding="utf-8")
 
-# 1) Rename the Ask Shiva submit button.
-text = text.replace(
-    'submitted = st.form_submit_button("Run Report", use_container_width=True)',
-    'submitted = st.form_submit_button("Ask ChatGPT", use_container_width=True)',
+# 1) Correct the submit button label everywhere.
+for old_label in ["Run Report", "Ask ChatGPT", "ASK CHATGPT", "Ask Shiva GPT"]:
+    text = text.replace(
+        f'submitted = st.form_submit_button("{old_label}", use_container_width=True)',
+        'submitted = st.form_submit_button("ASK SHIVA GPT", use_container_width=True)',
+    )
+
+# 2) Replace BOTH the old Supporting Data renderer and report renderer with
+# one clean answer + WHY renderer. This removes Draft Impact and View Supporting Data.
+new_renderer = '''def render_report(report: dict) -> None:
+    title = str(report.get("title") or "🧠 ASK SHIVA GPT").strip()
+    answer = str(report.get("answer") or "").strip()
+    why = str(
+        report.get("why")
+        or report.get("takeaway")
+        or report.get("note")
+        or ""
+    ).strip()
+
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(145deg,#17181c,#111214);border:1px solid #34363d;border-left:8px solid #31f22f;border-radius:20px;padding:24px 22px;margin:18px 0 14px;box-shadow:0 8px 28px rgba(0,0,0,.25);">
+            <div style="color:#d8d8dc;font-size:13px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px;">{title}</div>
+            <div style="color:#31f22f;font-size:clamp(30px,8vw,46px);line-height:1.08;font-weight:1000;letter-spacing:-.02em;white-space:pre-wrap;">{answer}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if why:
+        st.markdown(
+            f"""
+            <div style="background:linear-gradient(145deg,#1a1d1a,#121412);border:1px solid #324232;border-radius:20px;padding:22px;margin:14px 0 22px;">
+                <div style="color:#31f22f;font-size:13px;font-weight:1000;letter-spacing:.10em;text-transform:uppercase;margin-bottom:13px;">WHY</div>
+                <div style="color:#f5f5f6;font-size:17px;line-height:1.55;font-weight:600;white-space:pre-wrap;">{why}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+'''
+
+pattern = re.compile(
+    r'def render_supporting_data\(report: dict\) -> None:.*?(?=st\.markdown\(\'<div class="app-title">)',
+    re.DOTALL,
 )
 
-# 2) Replace the old report renderer. Remove Draft Impact and Supporting Data entirely.
-old_renderer = '''def render_report(report: dict) -> None:\n    st.markdown(f'<div class="report"><div class="report-title">{report.get("title", "SHIVA REPORT")}</div><div class="report-answer">{report.get("answer", "")}</div><div class="report-note">{report.get("note", "")}</div></div>', unsafe_allow_html=True)\n    takeaway = report.get("takeaway", "")\n    if takeaway:\n        st.markdown(f'<div class="takeaway"><b>🔥 DRAFT IMPACT</b><br>{takeaway}</div>', unsafe_allow_html=True)\n    render_supporting_data(report)\n'''
-
-new_renderer = '''def render_report(report: dict) -> None:\n    answer = str(report.get("answer", "") or "").strip()\n    why = str(\n        report.get("why", "")\n        or report.get("takeaway", "")\n        or report.get("note", "")\n        or ""\n    ).strip()\n\n    st.markdown(\n        f'<div class="report"><div class="report-title">{report.get("title", "SHIVA REPORT")}</div><div class="report-answer">{answer}</div></div>',\n        unsafe_allow_html=True,\n    )\n\n    if why:\n        st.markdown(\n            f'''<div style="background:#171b17;border:1px solid #2c3b2c;border-radius:16px;padding:16px;margin:12px 0;">\n                <div style="color:#31f22f;font-size:12px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px;">WHY</div>\n                <div style="color:#f7f7f8;font-size:15px;line-height:1.5;font-weight:650;white-space:pre-wrap;">{why}</div>\n            </div>''',\n            unsafe_allow_html=True,\n        )\n'''
-
-if old_renderer in text:
-    text = text.replace(old_renderer, new_renderer)
+if pattern.search(text):
+    text = pattern.sub(new_renderer, text, count=1)
 else:
-    print("render_report block already updated or did not match exactly.")
+    # If Supporting Data was already removed, replace render_report alone.
+    render_only = re.compile(
+        r'def render_report\(report: dict\) -> None:.*?(?=st\.markdown\(\'<div class="app-title">)',
+        re.DOTALL,
+    )
+    if render_only.search(text):
+        text = render_only.sub(new_renderer, text, count=1)
+    else:
+        raise RuntimeError("Could not locate Ask Shiva report renderer safely.")
 
-# 3) Clean duplicate weekly path declarations if an older integration left any behind.
+# 3) Update the hero copy so the page language matches the feature name.
+text = text.replace(
+    '<div class="hero-title">Ask Shiva</div>',
+    '<div class="hero-title">Ask Shiva GPT</div>',
+)
+
+# 4) Normalize success/spinner wording.
+text = text.replace("ChatGPT connected for this session.", "Shiva GPT connected for this session.")
+text = text.replace("Shiva is asking ChatGPT and checking the verified data...", "Shiva GPT is analyzing the verified data...")
+
+# 5) Clean duplicate weekly path declarations if an older integration left any behind.
 needle = 'WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"\n'
 while text.count(needle) > 1:
     first = text.find(needle)
@@ -28,4 +83,4 @@ while text.count(needle) > 1:
     text = text[:second] + text[second + len(needle):]
 
 APP.write_text(text, encoding="utf-8")
-print("Ask Shiva layout updated: Ask ChatGPT button, answer-first card, WHY context, no Draft Impact, no Supporting Data.")
+print("Ask Shiva GPT layout updated: correct button, answer-first card, WHY card, no Draft Impact, no Supporting Data.")
