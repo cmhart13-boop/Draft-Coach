@@ -11,6 +11,7 @@ import streamlit as st
 
 from shiva_engine import build_history_frame
 from shiva_query_router import run_shiva_query
+from shiva_chatgpt_service import ask_shiva_via_chatgpt
 from espn_news_service import fetch_espn_news
 
 APP_DIR = Path(__file__).resolve().parent
@@ -238,9 +239,24 @@ if page == "Shiva Intelligence":
         submitted = st.form_submit_button("Run Report", use_container_width=True)
     if submitted:
         if prompt.strip():
-            st.session_state["shiva_report_dynamic"] = run_shiva_query(prompt, history, roi, rankings, weekly)
+            api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+            if not api_key:
+                st.error("Ask Shiva is ready to use ChatGPT, but OPENAI_API_KEY has not been added to this app's Streamlit secrets yet.")
+            else:
+                try:
+                    with st.spinner("Shiva is analyzing the verified data..."):
+                        st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(
+                            question=prompt,
+                            history=history,
+                            roi=roi,
+                            rankings=rankings,
+                            weekly=weekly,
+                            api_key=api_key,
+                        )
+                except Exception as exc:
+                    st.error(f"Ask Shiva could not reach ChatGPT right now: {exc}")
         else:
-            st.warning("Type a report request first.")
+            st.warning("Type a question first.")
     report = st.session_state.get("shiva_report_dynamic")
     if report:
         render_report(report)
