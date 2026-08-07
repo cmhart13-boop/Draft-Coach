@@ -7,36 +7,66 @@ from typing import Any
 import pandas as pd
 from openai import OpenAI
 
-from shiva_query_router import resolve_players, run_shiva_query
+from shiva_query_router import retrieve_shiva_context, run_shiva_query
 
 MODEL = "gpt-5.6"
 
 SYSTEM_INSTRUCTIONS = """
-You are Shiva GPT, an expert ESPN Full-PPR fantasy-football analyst embedded inside a draft application.
+You are Shiva GPT, an elite fantasy-football analyst.
 
-You must answer like a knowledgeable human fantasy analyst, not a spreadsheet and not a generic disclaimer generator.
+You answer fantasy-football questions using analytical reasoning rather than preset verdicts.
 
-NON-NEGOTIABLE DATA RULES:
-- VERIFIED EVIDENCE supplied by the app is the source of truth for every factual statistic, ADP, finish, age, injury fact, or current-season claim.
-- Never invent a number.
-- Never substitute league-wide averages for a named-player question.
-- For a DRAFT DECISION between named players, do NOT simply pick the player with the higher historical PPG. Prioritize current ESPN ADP, expected availability, positional opportunity cost, roster construction, and then use historical production as supporting context.
-- In early rounds, explicitly consider the opportunity cost of taking QB/TE over elite RB/WR when the verified current ADP supports that distinction.
-- If evidence is incomplete, say exactly what is missing, but still give the strongest football analysis supported by what is present.
-- ESPN Full PPR means one point per reception.
-- If evidence references the wrong player or season, ignore it.
+DEFAULT LEAGUE FORMAT UNLESS THE USER SAYS OTHERWISE:
+- ESPN scoring
+- Full 1-point PPR
+- 10-team redraft
+- standard ESPN roster construction
+- snake draft
 
-OUTPUT FORMAT — FOLLOW EXACTLY:
-FINAL ANSWER: <one clear, concise answer to the user's question>
-WHY:
-<2-4 specific reasons explaining the actual football decision. Cite the verified evidence naturally. Do not write a generic sentence about “based on the data.”>
+YOU CAN ANSWER:
+- player statistical questions
+- historical questions
+- averages and PPG
+- weekly consistency
+- ADP questions
+- player comparisons
+- draft decisions
+- roster construction questions
+- hypothetical scenarios
+- breakout/bust questions
+- positional trends
+- historical trend analysis
 
-STYLE:
-- FINAL ANSWER must be decisive and short.
-- WHY must contain the actual reasoning the user came for.
-- If the user asks who to draft, say who and explain why.
-- Mobile-friendly.
-- Do not mention Pandas, routing, prompts, evidence objects, databases, APIs, or internal systems.
+CORE ARCHITECTURE RULE:
+THE DATABASE IS THE CALCULATOR. YOU ARE THE ANALYST.
+The application may supply verified statistical calculations, player-season rows, weekly rows, ADP rows, and historical aggregates. Treat those supplied facts as authoritative for the fields represented by those datasets. The application code does NOT choose a fantasy winner for you.
+
+FACTUAL QUESTIONS:
+- Report the requested statistic from the verified context.
+- Do not invent a number that is not supplied or deterministically calculated.
+- If a required factual value is unavailable, say exactly what is missing.
+
+DECISION / OPINION QUESTIONS:
+- You make the recommendation yourself after analyzing the original user question and supplied evidence.
+- Never select a player merely because he has more raw fantasy points than a player at another position.
+- For cross-position comparisons, evaluate positional scarcity, value over replacement, ADP, opportunity cost, expected positional advantage, roster construction, league size, starting requirements, replacement-level options available later, weekly consistency, ceiling, floor, historical performance, and current player/team context when those facts are available.
+- Current ADP is evidence of draft cost/availability, not an automatic winner rule.
+- Historical PPG is evidence of production, not an automatic winner rule.
+- Give a direct answer when the user asks who you would pick, then explain the actual fantasy-football reasoning.
+
+CONVERSATION RULES:
+- Use the EXACT ORIGINAL USER QUESTION as the request you answer.
+- Do not mention Pandas, routing, prompts, JSON, APIs, databases, evidence objects, or internal systems.
+- Never use generic filler such as "the recommendation is based on retrieved player records" or "the supporting rows are the evidence."
+- If the user asks "Who would you rather draft?" and no players/context can be inferred from the supplied context, ask them which players they mean.
+- If the user supplies a hypothetical roster situation, reason about roster construction rather than demanding a historical exact match.
+- Keep answers useful and mobile-friendly.
+
+RESPONSE STYLE:
+For a simple factual question, answer naturally in one or two concise paragraphs.
+For a player comparison or draft decision, start with a direct choice and then explain why.
+For a deeper question, you may use concise sections such as VERDICT, KEY DATA, WHY, RISK / COUNTERARGUMENT, and BOTTOM LINE when helpful.
+Do not force every answer into the same template.
 """
 
 GENERIC_WHY_PHRASES = (
@@ -49,120 +79,98 @@ GENERIC_WHY_PHRASES = (
 )
 
 
-def _frame_to_records(frame: pd.DataFrame | None, limit: int = 60) -> list[dict[str, Any]]:
-    if frame is None or frame.empty:
-        return []
-    safe = frame.head(limit).copy()
-    safe = safe.astype(object).where(pd.notna(safe), None)
-    return safe.to_dict(orient="records")
-
-
 def build_verified_evidence(
     question: str,
     history: pd.DataFrame,
     roi: pd.DataFrame,
     rankings: pd.DataFrame,
     weekly: pd.DataFrame | None = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    report = run_shiva_query(question, history, roi, rankings, weekly)
-    players, _ = resolve_players(question, history, rankings)
-
-    current_rows = pd.DataFrame()
-    if players and rankings is not None and not rankings.empty:
-        wanted = {p.lower() for p in players}
-        current_rows = rankings[
-            rankings["player_name"].astype(str).str.lower().isin(wanted)
-        ].copy()
-
-    evidence = {
-        "title": report.get("title", ""),
-        "deterministic_answer": report.get("answer", ""),
-        "deterministic_reasoning": report.get("takeaway") or report.get("note") or "",
-        "kind": report.get("kind", ""),
-        "structured_query": report.get("structured_query", {}),
-        "current_rankings_for_named_players": _frame_to_records(current_rows, limit=10),
-        "supporting_rows": _frame_to_records(report.get("table")),
-    }
-    return evidence, report
+) -> dict[str, Any]:
+    """Build verdict-free data context for the model."""
+    return retrieve_shiva_context(question, history, roi, rankings, weekly)
 
 
 def _configured_api_key(explicit_key: str | None = None) -> str:
     return (explicit_key or os.getenv("OPENAI_API_KEY") or "").strip()
 
 
-def _clean_why(text: str) -> str:
-    why = (text or "").strip()
-    lower = why.lower()
-    if not why:
+def _clean_explanation(text: str) -> str:
+    value = (text or "").strip()
+    lower = value.lower()
+    if not value:
         return ""
     if any(phrase in lower for phrase in GENERIC_WHY_PHRASES):
         return ""
-    return why
+    return value
 
 
-def _local_fallback(report: dict[str, Any], reason: str = "") -> dict[str, Any]:
-    result = dict(report)
-    result["title"] = "🧠 ASK SHIVA GPT"
-    result.setdefault("answer", "")
-    result.setdefault("note", "")
-    result.setdefault("takeaway", "")
-    result.setdefault("table", pd.DataFrame())
-    result.setdefault("kind", "local_verified")
-    result.setdefault("structured_query", {})
-
-    why = _clean_why(str(result.get("takeaway") or result.get("note") or ""))
-    if not why and reason:
-        why = "I could not reach the live GPT analyst, so I am showing the verified local recommendation without inventing extra reasoning."
-    result["why"] = why
-    return result
-
-
-def _split_model_response(text: str) -> tuple[str, str]:
+def _split_for_existing_ui(text: str) -> tuple[str, str]:
+    """Keep the existing page styling while allowing conversational model output."""
     cleaned = (text or "").strip()
     if not cleaned:
         return "", ""
 
-    upper = cleaned.upper()
-    answer_marker = "FINAL ANSWER:"
-    why_marker = "WHY:"
+    # If the model naturally labels WHY, use that split.
+    match = re_search_why(cleaned)
+    if match is not None:
+        answer = cleaned[: match[0]].strip()
+        why = cleaned[match[1] :].strip()
+        return answer, _clean_explanation(why)
 
-    if answer_marker in upper:
-        start = upper.index(answer_marker) + len(answer_marker)
-        remainder = cleaned[start:].strip()
-        remainder_upper = remainder.upper()
-        if why_marker in remainder_upper:
-            split_at = remainder_upper.index(why_marker)
-            answer = remainder[:split_at].strip()
-            why = remainder[split_at + len(why_marker):].strip()
-            return answer, why
-        return remainder, ""
-
-    if why_marker in upper:
-        split_at = upper.index(why_marker)
-        return cleaned[:split_at].strip(), cleaned[split_at + len(why_marker):].strip()
-
-    parts = [part.strip() for part in cleaned.split("\n\n") if part.strip()]
-    if len(parts) >= 2:
-        return parts[0], "\n\n".join(parts[1:])
+    # Otherwise put the first paragraph in the large answer card and the remainder in WHY.
+    paragraphs = [p.strip() for p in cleaned.split("\n\n") if p.strip()]
+    if len(paragraphs) >= 2:
+        return paragraphs[0], _clean_explanation("\n\n".join(paragraphs[1:]))
     return cleaned, ""
 
 
-def _enforce_deterministic_draft_answer(
-    local_report: dict[str, Any],
-    model_answer: str,
-    model_why: str,
-) -> tuple[str, str]:
-    """Draft recommendations may be explained by GPT, but not contradicted by it."""
-    kind = str(local_report.get("kind") or "")
-    local_answer = str(local_report.get("answer") or "").strip()
-    local_why = str(local_report.get("takeaway") or local_report.get("note") or "").strip()
+def re_search_why(text: str) -> tuple[int, int] | None:
+    import re
 
-    if kind == "draft_decision" and local_answer.upper().startswith("I'D TAKE"):
-        answer = local_answer
-        why = _clean_why(model_why) or _clean_why(local_why)
-        return answer, why
+    match = re.search(r"(?im)^\s*(?:WHY|HERE'S WHY)\s*:\s*", text)
+    if not match:
+        return None
+    return match.start(), match.end()
 
-    return model_answer, _clean_why(model_why)
+
+def _factual_fallback(
+    question: str,
+    history: pd.DataFrame,
+    roi: pd.DataFrame,
+    rankings: pd.DataFrame,
+    weekly: pd.DataFrame | None,
+    reason: str,
+) -> dict[str, Any]:
+    """If GPT is unavailable, return calculator facts only. Never make a draft verdict in code."""
+    report = run_shiva_query(question, history, roi, rankings, weekly)
+    result = dict(report)
+    result["title"] = "🧠 ASK SHIVA GPT"
+    result["table"] = pd.DataFrame()
+    kind = str(report.get("kind") or "")
+
+    if kind == "analysis_required":
+        result["answer"] = "SHIVA GPT CONNECTION REQUIRED FOR THIS RECOMMENDATION"
+        result["why"] = "The verified fantasy context is available, but the application code intentionally does not choose a winner. Reconnect Shiva GPT so the AI analyst can evaluate the decision."
+    else:
+        result["why"] = _clean_explanation(str(report.get("note") or report.get("takeaway") or ""))
+
+    result["note"] = ""
+    result["takeaway"] = ""
+    result["fallback_reason"] = reason
+    return result
+
+
+def _response_input(question: str, evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Original question is passed untouched after a separate verified data-context message."""
+    data_context = (
+        "VERIFIED SHIVA DATA CONTEXT\n"
+        "Use this as factual evidence only. It contains no preselected fantasy winner.\n\n"
+        + json.dumps(evidence, ensure_ascii=False, default=str)
+    )
+    return [
+        {"role": "developer", "content": data_context},
+        {"role": "user", "content": question},
+    ]
 
 
 def ask_shiva_via_chatgpt(
@@ -173,42 +181,29 @@ def ask_shiva_via_chatgpt(
     weekly: pd.DataFrame | None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    """GPT analyst grounded in deterministic verified Shiva evidence."""
-    evidence, local_report = build_verified_evidence(question, history, roi, rankings, weekly)
+    """Production Ask Shiva endpoint: retrieve facts, then let the OpenAI model analyze them."""
+    original_question = question.strip()
+    evidence = build_verified_evidence(original_question, history, roi, rankings, weekly)
     key = _configured_api_key(api_key)
 
     if not key:
-        return _local_fallback(local_report, "missing_api_key")
+        return _factual_fallback(original_question, history, roi, rankings, weekly, "missing_api_key")
 
     try:
         client = OpenAI(api_key=key)
         response = client.responses.create(
             model=MODEL,
-            reasoning={"effort": "low"},
+            reasoning={"effort": "medium"},
             instructions=SYSTEM_INSTRUCTIONS,
-            input=(
-                "USER QUESTION:\n"
-                + question
-                + "\n\nVERIFIED EVIDENCE FROM SHIVA:\n"
-                + json.dumps(evidence, ensure_ascii=False, default=str)
-                + "\n\nIMPORTANT: If deterministic_answer contains an explicit draft recommendation, preserve that recommendation exactly and use WHY to explain the football logic. Return exactly two sections: FINAL ANSWER and WHY."
-            ),
+            input=_response_input(original_question, evidence),
         )
-
         text = (response.output_text or "").strip()
         if not text:
-            return _local_fallback(local_report, "empty_model_response")
+            return _factual_fallback(original_question, history, roi, rankings, weekly, "empty_model_response")
 
-        answer, why = _split_model_response(text)
+        answer, why = _split_for_existing_ui(text)
         if not answer:
-            return _local_fallback(local_report, "empty_model_answer")
-
-        answer, why = _enforce_deterministic_draft_answer(local_report, answer, why)
-
-        if not why:
-            why = _clean_why(
-                str(local_report.get("takeaway") or local_report.get("note") or "")
-            )
+            answer = text
 
         return {
             "title": "🧠 ASK SHIVA GPT",
@@ -218,7 +213,13 @@ def ask_shiva_via_chatgpt(
             "takeaway": "",
             "table": pd.DataFrame(),
             "kind": "chatgpt",
-            "structured_query": evidence.get("structured_query", {}),
+            "structured_query": {
+                "intent": evidence.get("intent"),
+                "resolved_players": evidence.get("resolved_players", []),
+                "requested_seasons": evidence.get("requested_seasons", []),
+            },
         }
-    except Exception:
-        return _local_fallback(local_report, "openai_error")
+    except Exception as exc:
+        fallback = _factual_fallback(original_question, history, roi, rankings, weekly, "openai_error")
+        fallback["debug_error"] = str(exc)
+        return fallback
