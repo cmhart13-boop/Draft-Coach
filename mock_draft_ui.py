@@ -116,7 +116,12 @@ def _render_top_status(state: dict[str, Any]) -> None:
     )
 
 
-def _render_timer(state: dict[str, Any]) -> None:
+@st.fragment(run_every=1)
+def _live_timer_fragment() -> None:
+    """Refresh the user clock every second without resetting centralized draft state."""
+    state = st.session_state.get(_state_key())
+    if not state:
+        return
     remain = timer_remaining(state)
     st.progress(remain / max(1, int(state["settings"]["secondsPerPick"])), text=f"⏱️ {remain}s")
     if state["status"] == "active" and not state["paused"] and state["currentTeam"] == state["userTeamId"] and remain <= 0:
@@ -124,7 +129,6 @@ def _render_timer(state: dict[str, Any]) -> None:
         advance_cpu_until_user(state)
         st.session_state[_state_key()] = state
         st.rerun()
-
 
 def _render_controls(state: dict[str, Any], original_pool: list[dict[str, Any]]) -> None:
     cols = st.columns(4)
@@ -339,7 +343,7 @@ def render_mock_draft_room(
         return
 
     _render_top_status(state)
-    _render_timer(state)
+    _live_timer_fragment()
     _render_controls(state, original_pool)
     _render_recommendations(state)
 
