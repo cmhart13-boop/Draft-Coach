@@ -19,6 +19,7 @@ RANKINGS_PATH = APP_DIR / "current_rankings.csv"
 BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"
 WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
 WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
+WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
 SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 st.set_page_config(
@@ -343,11 +344,21 @@ if articles:
                 description = escape(str(article.get("description") or ""))
                 published = escape(str(article.get("published") or ""))
                 article_url = escape(str(article.get("link") or "https://www.espn.com/nfl/"), quote=True)
-                short_description = description[:150] + ("..." if len(description) > 150 else "")
+                thumbnail = escape(str(article.get("thumbnail") or ""), quote=True)
+                short_description = description[:135] + ("..." if len(description) > 135 else "")
+                image_html = (
+                    f'<div style="width:100%;height:112px;overflow:hidden;border-radius:12px;margin-bottom:11px;background:#101114;">'
+                    f'<img src="{thumbnail}" alt="" loading="lazy" referrerpolicy="no-referrer" '
+                    f'style="width:100%;height:100%;object-fit:cover;display:block;" />'
+                    f'</div>'
+                    if thumbnail else
+                    '<div style="height:54px;border-radius:12px;margin-bottom:11px;background:linear-gradient(135deg,#202f42,#141922);display:flex;align-items:center;justify-content:center;color:#31f22f;font-size:22px;font-weight:1000;">ESPN</div>'
+                )
                 st.markdown(
                     f"""
-                    <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:14px;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);margin-bottom:10px;">
+                    <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:12px;min-height:290px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);margin-bottom:10px;overflow:hidden;">
                       <div>
+                        {image_html}
                         <div style="color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px;">ESPN NFL</div>
                         <div style="color:#fff;font-size:14px;font-weight:950;line-height:1.25;">{title}</div>
                         <div style="color:#a7a8ad;font-size:10px;margin-top:7px;">{published}</div>
