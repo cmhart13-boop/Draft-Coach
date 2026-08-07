@@ -1,1 +1,2 @@
-# ESPN news uses Python standard-library urllib/json; no feedparser dependency.
+# Runtime dependencies
+openai>=1.0.0
