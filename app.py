@@ -94,6 +94,11 @@ def load_births() -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=False)
 def load_weekly() -> pd.DataFrame:
+    """Load only weekly columns actually used by Shiva/Mock Draft.
+
+    The compressed weekly master expands dramatically in memory. cache_resource keeps
+    one shared read-only frame instead of serializing/copying it per Streamlit session.
+    """
     if not WEEKLY_PATH.exists():
         return pd.DataFrame()
     header = pd.read_csv(WEEKLY_PATH, compression="gzip", nrows=0).columns.tolist()
@@ -103,12 +108,15 @@ def load_weekly() -> pd.DataFrame:
         "fantasy_points_ppr", "fantasy_points", "targets", "receptions",
         "receiving_yards", "receiving_tds", "carries", "rushing_yards",
         "rushing_tds", "target_share", "red_zone_touches", "attempts",
-        "passing_yards", "passing_tds", "interceptions",
+        "passing_yards", "passing_tds", "interceptions"
     ]
     usecols = [c for c in wanted if c in header]
-    return pd.read_csv(WEEKLY_PATH, compression="gzip", usecols=usecols or None, low_memory=False)
-
-
+    return pd.read_csv(
+        WEEKLY_PATH,
+        compression="gzip",
+        usecols=usecols or None,
+        low_memory=False,
+    )
 roi = load_roi()
 rankings = load_rankings()
 births = load_births()
@@ -336,11 +344,16 @@ elif page == "Draft Coach":
             st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["Round"])}</div><div><div class="player">{escape(str(pick["Player"]))} ({pick["Pos"]})</div><div class="meta">Pick {int(pick["Pick"])} · Alternatives: {escape(str(pick["Alternatives"] or "—"))}</div></div><div class="tag">ADP {pick["ADP"]:.1f}</div></div>', unsafe_allow_html=True)
 
 elif page == "Mock Draft":
+    # One centralized draft state powers both Players and Draft Board views.
     try:
         secret_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
     except Exception:
         secret_key = ""
-    mock_api_key = str(os.environ.get("OPENAI_API_KEY", "")).strip() or secret_key or str(st.session_state.get("shiva_openai_api_key", "")).strip()
+    mock_api_key = (
+        str(os.environ.get("OPENAI_API_KEY", "")).strip()
+        or secret_key
+        or str(st.session_state.get("shiva_openai_api_key", "")).strip()
+    )
     render_mock_draft_room(
         rankings=rankings,
         weekly=load_weekly(),
