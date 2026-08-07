@@ -84,11 +84,33 @@ def load_births() -> pd.DataFrame:
     df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")
     return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_weekly() -> pd.DataFrame:
+    """Load only weekly columns used by Shiva/Mock Draft and share one in-memory frame.
+
+    The full compressed master expands dramatically in RAM. Streamlit cache_data also
+    serializes/copies the dataframe per session, which can push Community Cloud over its
+    memory limit. cache_resource keeps one shared read-only dataframe and usecols avoids
+    loading dozens of unused NFL stat columns.
+    """
     if not WEEKLY_PATH.exists():
         return pd.DataFrame()
-    return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")
+    header = pd.read_csv(WEEKLY_PATH, compression="gzip", nrows=0).columns.tolist()
+    wanted = [
+        "season", "week", "season_type", "player_id", "player_display_name",
+        "player_name", "name", "position", "recent_team", "team",
+        "fantasy_points_ppr", "fantasy_points", "targets", "receptions",
+        "receiving_yards", "receiving_tds", "carries", "rushing_yards",
+        "rushing_tds", "target_share", "red_zone_touches", "attempts",
+        "passing_yards", "passing_tds", "interceptions"
+    ]
+    usecols = [c for c in wanted if c in header]
+    return pd.read_csv(
+        WEEKLY_PATH,
+        compression="gzip",
+        usecols=usecols or None,
+        low_memory=False,
+    )
 
 roi = load_roi()
 rankings = load_rankings()
