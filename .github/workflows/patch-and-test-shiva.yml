@@ -12,6 +12,7 @@ on:
       - scripts/mock_draft_regression.py
       - scripts/patch_mock_draft_room.py
       - scripts/patch_mock_timer.py
+      - scripts/refresh_mock_draft_layout.py
       - scripts/optimize_streamlit_resources.py
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
         run: |
           python scripts/patch_mock_draft_room.py
           python scripts/patch_mock_timer.py
+          python scripts/refresh_mock_draft_layout.py
           python scripts/optimize_streamlit_resources.py
 
       - name: Run Ask Shiva regression checks
@@ -47,6 +49,19 @@ jobs:
 
       - name: Run all 26 Mock Draft regression checks
         run: python scripts/mock_draft_regression.py
+
+      - name: Verify traditional player list and colored draft board
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('mock_draft_ui.py').read_text()
+          assert 'Players are stacked by 2026 rank / ADP' in s
+          assert "st.segmented_control(\n        'Position'" in s
+          assert 'mock-board-cell.pos-rb' in s
+          assert 'mock-board-cell.pos-wr' in s
+          assert 'mock-board-legend' in s
+          print('Traditional player list + colored board present')
+          PY
 
       - name: Verify resource-safe weekly loader
         run: |
@@ -77,5 +92,5 @@ jobs:
             echo "All integrations already present."
             exit 0
           fi
-          git commit -m "Reduce Streamlit memory usage"
+          git commit -m "Refresh mock draft layout"
           git push
