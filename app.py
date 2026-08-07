@@ -19,8 +19,6 @@ DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
 RANKINGS_PATH = APP_DIR / "current_rankings.csv"
 BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"
 WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
-WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
-WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
 SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 st.set_page_config(
@@ -239,22 +237,25 @@ if page == "Shiva Intelligence":
         submitted = st.form_submit_button("Run Report", use_container_width=True)
     if submitted:
         if prompt.strip():
-            api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
-            if not api_key:
-                st.error("Ask Shiva is ready to use ChatGPT, but OPENAI_API_KEY has not been added to this app's Streamlit secrets yet.")
-            else:
-                try:
-                    with st.spinner("Shiva is analyzing the verified data..."):
-                        st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(
-                            question=prompt,
-                            history=history,
-                            roi=roi,
-                            rankings=rankings,
-                            weekly=weekly,
-                            api_key=api_key,
-                        )
-                except Exception as exc:
-                    st.error(f"Ask Shiva could not reach ChatGPT right now: {exc}")
+            try:
+                api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+            except Exception:
+                api_key = ""
+            try:
+                with st.spinner("Shiva is analyzing the verified data..."):
+                    st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(
+                        question=prompt,
+                        history=history,
+                        roi=roi,
+                        rankings=rankings,
+                        weekly=weekly,
+                        api_key=api_key or None,
+                    )
+            except Exception:
+                # Last-resort verified local engine: Ask Shiva must never die on the user.
+                st.session_state["shiva_report_dynamic"] = run_shiva_query(
+                    prompt, history, roi, rankings, weekly
+                )
         else:
             st.warning("Type a question first.")
     report = st.session_state.get("shiva_report_dynamic")
