@@ -50,8 +50,9 @@ st.markdown(
 <style>
 :root{--bg:#101012;--card:#1c1c1f;--line:#34343a;--muted:#929399;--white:#f7f7f8;--green:#31f22f;--blue:#67a0ff;--red:#ff5c66}
 html,body,[class*="css"]{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}.stApp{background:var(--bg);color:var(--white)}.block-container{max-width:430px;padding:10px 12px 60px!important}#MainMenu,footer,header{visibility:hidden}h1,h2,h3,h4,p,label{color:var(--white)!important}.app-title{text-align:center;font-size:18px;font-weight:1000;margin:4px 0 8px}.nav-label{color:#7f8087;font-size:9px;font-weight:1000;letter-spacing:.1em;text-transform:uppercase;margin:6px 0 2px}
-div[data-testid="stHorizontalBlock"]:has(.st-key-nav_intel){display:flex!important;flex-wrap:nowrap!important;gap:1px!important;width:100%!important}div[data-testid="stHorizontalBlock"]:has(.st-key-nav_intel)>div{flex:1 1 0!important;width:20%!important;min-width:0!important}.st-key-nav_intel button,.st-key-nav_coach button,.st-key-nav_live button,.st-key-nav_grade button,.st-key-nav_history button{width:100%!important;min-width:0!important;min-height:76px!important;padding:3px 1px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#96979d!important;font-size:9px!important;font-weight:900!important;line-height:1.04!important;white-space:pre-line!important;text-align:center!important}.st-key-nav_intel button p,.st-key-nav_coach button p,.st-key-nav_live button p,.st-key-nav_grade button p,.st-key-nav_history button p{white-space:pre-line!important;text-align:center!important;line-height:1.04!important;margin:0!important;color:inherit!important;font-size:9px!important;font-weight:900!important}.st-key-nav_intel button p::first-line,.st-key-nav_coach button p::first-line,.st-key-nav_live button p::first-line,.st-key-nav_grade button p::first-line,.st-key-nav_history button p::first-line{font-size:27px!important;line-height:1.15!important}.st-key-nav_intel button[kind="primary"],.st-key-nav_coach button[kind="primary"],.st-key-nav_live button[kind="primary"],.st-key-nav_grade button[kind="primary"],.st-key-nav_history button[kind="primary"]{color:#fff!important;filter:drop-shadow(0 0 7px rgba(49,242,47,.45))!important}.st-key-nav_intel button[kind="primary"] p::first-line,.st-key-nav_coach button[kind="primary"] p::first-line,.st-key-nav_live button[kind="primary"] p::first-line,.st-key-nav_grade button[kind="primary"] p::first-line,.st-key-nav_history button[kind="primary"] p::first-line{color:var(--green)!important;text-shadow:0 0 7px rgba(49,242,47,.75)!important}
+div[data-testid="stHorizontalBlock"]:has(.st-key-nav_intel){display:flex!important;flex-wrap:nowrap!important;gap:2px!important;width:100%!important}div[data-testid="stHorizontalBlock"]:has(.st-key-nav_intel)>div{flex:1 1 0!important;width:25%!important;min-width:0!important}.st-key-nav_intel button,.st-key-nav_coach button,.st-key-nav_mock button,.st-key-nav_history button{width:100%!important;min-width:0!important;min-height:76px!important;padding:3px 1px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#96979d!important;font-size:9px!important;font-weight:900!important;line-height:1.04!important;white-space:pre-line!important;text-align:center!important}.st-key-nav_intel button p,.st-key-nav_coach button p,.st-key-nav_mock button p,.st-key-nav_history button p{white-space:pre-line!important;text-align:center!important;line-height:1.04!important;margin:0!important;color:inherit!important;font-size:9px!important;font-weight:900!important}.st-key-nav_intel button p::first-line,.st-key-nav_coach button p::first-line,.st-key-nav_mock button p::first-line,.st-key-nav_history button p::first-line{font-size:27px!important;line-height:1.15!important}.st-key-nav_intel button[kind="primary"],.st-key-nav_coach button[kind="primary"],.st-key-nav_mock button[kind="primary"],.st-key-nav_history button[kind="primary"]{color:#fff!important;filter:drop-shadow(0 0 7px rgba(49,242,47,.45))!important}.st-key-nav_intel button[kind="primary"] p::first-line,.st-key-nav_coach button[kind="primary"] p::first-line,.st-key-nav_mock button[kind="primary"] p::first-line,.st-key-nav_history button[kind="primary"] p::first-line{color:var(--green)!important;text-shadow:0 0 7px rgba(49,242,47,.75)!important}
 .stButton button{width:100%!important;min-height:48px!important;border-radius:14px!important;border:1px solid var(--line)!important;background:#242429!important;color:#fff!important;font-weight:900!important}[data-baseweb="select"]>div,[data-testid="stNumberInput"]>div>div,[data-testid="stTextInput"] input{background:#20232d!important;border:1px solid #303541!important;border-radius:14px!important;color:#fff!important;min-height:48px!important}[data-testid="stExpander"]{border:1px solid var(--line)!important;border-radius:16px!important;background:#18181b!important;overflow:hidden!important;margin:10px 0!important}.hero{background:linear-gradient(145deg,#202126,#151518);border:1px solid var(--line);border-radius:20px;padding:17px;margin:10px 0 12px}.kicker{color:var(--green);font-size:10px;font-weight:1000;letter-spacing:.1em;text-transform:uppercase}.hero-title{font-size:24px;font-weight:1000;line-height:1.08;margin-top:7px}.hero-sub{color:var(--muted);font-size:13px;line-height:1.45;margin-top:7px}.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.metric{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:11px;min-height:78px}.metric-label{color:#85868c;font-size:9px;font-weight:1000;text-transform:uppercase}.metric-value{color:#fff;font-size:19px;font-weight:1000;margin-top:15px}.green{color:var(--green)!important}.blue{color:var(--blue)!important}.red{color:var(--red)!important}.player-card,.support-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:9px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;margin:7px 0}.pos,.support-year{font-weight:1000;color:var(--green)}.player,.support-name{font-size:13px;font-weight:1000}.meta,.support-meta{font-size:10px;color:var(--muted);line-height:1.35;margin-top:3px}.tag,.support-rank{font-size:10px;font-weight:1000;color:var(--blue);text-align:right}.report{background:#151518;border:1px solid var(--line);border-left:6px solid var(--green);border-radius:16px;padding:16px;margin:12px 0}.report-title{font-size:13px;font-weight:1000;color:#fff}.report-answer{color:var(--green);font-size:30px;font-weight:1000;line-height:1.05;margin-top:8px}.report-note{color:#d0d0d4;font-size:13px;font-weight:700;line-height:1.45;margin-top:8px}.takeaway{background:#171b17;border:1px solid #2c3b2c;border-radius:14px;padding:13px;margin:10px 0}.takeaway b{color:var(--green)!important}
+@media(max-width:360px){.st-key-nav_intel button,.st-key-nav_coach button,.st-key-nav_mock button,.st-key-nav_history button{font-size:8px!important;min-height:70px!important}.st-key-nav_intel button p,.st-key-nav_coach button p,.st-key-nav_mock button p,.st-key-nav_history button p{font-size:8px!important}.st-key-nav_intel button p::first-line,.st-key-nav_coach button p::first-line,.st-key-nav_mock button p::first-line,.st-key-nav_history button p::first-line{font-size:24px!important}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -105,10 +106,13 @@ def franchise_rows(manager: str, scope: str) -> pd.DataFrame:
     return roi[roi.apply(lambda row: (row["league_name"], row["team_id"]) in keys, axis=1)].copy()
 
 def context_selector(prefix: str) -> tuple[str, str, pd.DataFrame]:
-    scope = st.selectbox("League", ["Shiva", "Shiva 2.0", "Combined"], index=2, key=f"{prefix}_scope")
+    selector_cols = st.columns(2)
+    with selector_cols[0]:
+        scope = st.selectbox("League", ["Shiva", "Shiva 2.0", "Combined"], index=2, key=f"{prefix}_scope")
     managers = managers_for(scope)
     default = next((x for x in ["Chris H", "Chris Hart"] if x in managers), managers[0] if managers else "")
-    manager = st.selectbox("Manager", managers, index=managers.index(default) if default in managers else 0, key=f"{prefix}_manager")
+    with selector_cols[1]:
+        manager = st.selectbox("Manager", managers, index=managers.index(default) if default in managers else 0, key=f"{prefix}_manager")
     return scope, manager, franchise_rows(manager, scope)
 
 def snake_schedule(slot: int, teams: int, rounds: int = 16) -> list[dict[str, int]]:
@@ -198,10 +202,17 @@ def render_report(report: dict) -> None:
 
 st.markdown('<div class="app-title">SHIVA DRAFT INTELLIGENCE</div>', unsafe_allow_html=True)
 st.markdown('<div class="nav-label">Shiva Tools</div>', unsafe_allow_html=True)
-TOOLS = [("Shiva Intelligence", "📊\nShiva\nIntelligence", "intel"), ("Draft Coach", "📋\nDraft\nCoach", "coach"), ("Live Draft", "🧩\nLive\nDraft", "live"), ("Grade Draft", "📝\nGrade\nDraft", "grade"), ("Shiva League History", "🏛️\nLeague\nHistory", "history")]
+TOOLS = [
+    ("Shiva Intelligence", "📊\nShiva\nIntelligence", "intel"),
+    ("Draft Coach", "📋\nDraft\nCoach", "coach"),
+    ("Mock Draft", "🧩\nMock\nDraft", "mock"),
+    ("Shiva League History", "🏛️\nLeague\nHistory", "history"),
+]
 if "page" not in st.session_state:
     st.session_state.page = "Shiva Intelligence"
-for (name, label, key), col in zip(TOOLS, st.columns(5)):
+if st.session_state.page in {"Live Draft", "Grade Draft"}:
+    st.session_state.page = "Mock Draft" if st.session_state.page == "Live Draft" else "Shiva Intelligence"
+for (name, label, key), col in zip(TOOLS, st.columns(4)):
     with col:
         if st.button(label, key=f"nav_{key}", use_container_width=True, type="primary" if st.session_state.page == name else "secondary"):
             st.session_state.page = name
@@ -231,9 +242,12 @@ elif page == "Draft Coach":
         st.write(f"Use {profile['best_pos']} only as a tiebreaker between similarly ranked players. In Round {profile['worst_round'] or '—'}, slow down and follow the highest remaining ADP tier.")
     with st.expander("🎯 Player Fit", expanded=False):
         cols = st.columns(3)
-        teams = cols[0].number_input("Teams", 8, 16, 10, 1, key="fit_teams")
-        slot = cols[1].number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="fit_slot")
-        rnd = cols[2].number_input("Round", 1, 16, 1, 1, key="fit_round")
+        with cols[0]:
+            teams = st.number_input("Teams", 8, 16, 10, 1, key="fit_teams")
+        with cols[1]:
+            slot = st.number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="fit_slot")
+        with cols[2]:
+            rnd = st.number_input("Round", 1, 16, 1, 1, key="fit_round")
         overall = (int(rnd) - 1) * int(teams) + int(slot) if int(rnd) % 2 else int(rnd) * int(teams) - int(slot) + 1
         fits = player_fit(overall, int(rnd)).head(12)
         if fits.empty:
@@ -244,16 +258,23 @@ elif page == "Draft Coach":
             for _, player in fits.iterrows():
                 st.markdown(f'<div class="player-card"><div class="pos">{player["position"]}</div><div><div class="player">{player["player_name"]}</div><div class="meta">ESPN ADP {player["adp"]:.1f} · {player["availability"]}</div></div><div class="tag">{player["fit"]}</div></div>', unsafe_allow_html=True)
     with st.expander("🗺️ Draft Plan", expanded=False):
-        teams = st.number_input("League Size", 8, 16, 10, 1, key="plan_teams")
-        slot = st.number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="plan_slot")
+        plan_cols = st.columns(2)
+        with plan_cols[0]:
+            teams = st.number_input("League Size", 8, 16, 10, 1, key="plan_teams")
+        with plan_cols[1]:
+            slot = st.number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="plan_slot")
         for _, pick in build_plan(int(slot), int(teams), 16).iterrows():
             st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["Round"])}</div><div><div class="player">{pick["Player"]} ({pick["Pos"]})</div><div class="meta">Pick {int(pick["Pick"])} · Alternatives: {pick["Alternatives"] or "—"}</div></div><div class="tag">ADP {pick["ADP"]:.1f}</div></div>', unsafe_allow_html=True)
 
-elif page == "Live Draft":
-    st.markdown('<div class="hero"><div class="kicker">🧩 Live Draft</div><div class="hero-title">Who Should You Take Now?</div><div class="hero-sub">Set the current overall pick. The app never invents a draft position.</div></div>', unsafe_allow_html=True)
-    teams = st.number_input("Teams", 8, 16, 10, 1, key="live_teams")
-    slot = st.number_input("Your Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="live_slot")
-    current_pick = st.number_input("Current Overall Pick", 1, int(teams) * 20, 1, 1, key="live_pick")
+elif page == "Mock Draft":
+    st.markdown('<div class="hero"><div class="kicker">🧩 Mock Draft</div><div class="hero-title">Who Should You Take Now?</div><div class="hero-sub">Choose your league size, draft slot and current overall pick. Recommendations update from current ESPN ADP.</div></div>', unsafe_allow_html=True)
+    mock_cols = st.columns(3)
+    with mock_cols[0]:
+        teams = st.number_input("Teams", 8, 16, 10, 1, key="mock_teams")
+    with mock_cols[1]:
+        slot = st.number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="mock_slot")
+    with mock_cols[2]:
+        current_pick = st.number_input("Current Pick", 1, int(teams) * 20, 1, 1, key="mock_pick")
     schedule = pd.DataFrame(snake_schedule(int(slot), int(teams), 20))
     future = schedule[schedule["Overall"].ge(int(current_pick))]
     next_pick = int(future.iloc[0]["Overall"]) if not future.empty else None
@@ -264,34 +285,15 @@ elif page == "Live Draft":
     for _, player in player_fit(recommendation_pick, rnd).head(10).iterrows():
         st.markdown(f'<div class="player-card"><div class="pos">{player["position"]}</div><div><div class="player">{player["player_name"]}</div><div class="meta">ESPN ADP {player["adp"]:.1f} · {player["availability"]}</div></div><div class="tag">{player["fit"]}</div></div>', unsafe_allow_html=True)
 
-elif page == "Grade Draft":
-    st.markdown('<div class="hero"><div class="kicker">📝 Grade Draft</div><div class="hero-title">Grade Your Draft</div><div class="hero-sub">Enter your picks. Premium rounds count more heavily.</div></div>', unsafe_allow_html=True)
-    teams = st.number_input("Teams", 8, 16, 10, 1, key="grade_teams")
-    slot = st.number_input("Your Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="grade_slot")
-    draft = st.data_editor(pd.DataFrame(columns=["Round", "Player", "Pos", "ADP"]), num_rows="dynamic", use_container_width=True, hide_index=True)
-    if st.button("Grade This Draft", use_container_width=True):
-        if draft.empty:
-            st.warning("Add drafted players first.")
-        else:
-            draft["Round"] = pd.to_numeric(draft["Round"], errors="coerce")
-            draft["ADP"] = pd.to_numeric(draft["ADP"], errors="coerce")
-            schedule = {x["Round"]: x["Overall"] for x in snake_schedule(int(slot), int(teams), 20)}
-            draft["Pick"] = draft["Round"].map(schedule)
-            draft["Value"] = draft["Pick"] - draft["ADP"]
-            draft["Score"] = (72 + 1.15 * draft["Value"].clip(-25, 25)).clip(25, 98)
-            weights = draft["Round"].map({1: 1, 2: .92, 3: .84, 4: .74, 5: .64, 6: .55}).fillna(.3)
-            valid = draft.dropna(subset=["Score"])
-            score = float(np.average(valid["Score"], weights=weights.loc[valid.index])) if not valid.empty else np.nan
-            grade = "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 50 else "F"
-            st.markdown(f'<div class="report"><div class="report-title">Draft Grade</div><div class="report-answer">{grade}</div><div class="report-note">{score:.1f}/100 · Premium rounds count most.</div></div>', unsafe_allow_html=True)
-            st.dataframe(draft, use_container_width=True, hide_index=True)
-
 else:
     st.markdown('<div class="hero"><div class="kicker">🏛️ Shiva League History</div><div class="hero-title">Search Historical Drafts</div><div class="hero-sub">Filter by league, current manager and season.</div></div>', unsafe_allow_html=True)
     scope, manager, rows = context_selector("history")
+    history_cols = st.columns(2)
     seasons = sorted(rows["season"].dropna().astype(int).unique(), reverse=True)
-    season = st.selectbox("Season", ["All Seasons"] + [str(x) for x in seasons])
-    search = st.text_input("Search Player", placeholder="Optional player name")
+    with history_cols[0]:
+        season = st.selectbox("Season", ["All Seasons"] + [str(x) for x in seasons])
+    with history_cols[1]:
+        search = st.text_input("Search Player", placeholder="Optional player name")
     result = rows.copy()
     if season != "All Seasons":
         result = result[result["season"].eq(int(season))]
@@ -302,8 +304,6 @@ else:
 
 # ============================================================
 # LIVE ESPN NFL NEWS FEED
-# Appended as a standalone UI component so existing app logic
-# above remains unchanged.
 # ============================================================
 import feedparser
 from html import escape
