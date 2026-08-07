@@ -77,10 +77,12 @@ def _css() -> None:
 .mock-pick-no{font-size:8px;color:#9a9ca4}.mock-pick-player{font-size:9px;color:#fff;font-weight:1000;line-height:1.12;margin-top:4px}.mock-pick-meta{font-size:8px;color:#c0c2c8;margin-top:3px}
 .mock-board-legend{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0 8px}.mock-legend-item{font-size:8px;font-weight:900;padding:4px 7px;border-radius:7px}
 .mock-roster-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;padding:6px 0;border-bottom:1px solid #252529}.mock-roster-slot{font-size:8px;color:#31f22f;font-weight:1000}.mock-roster-name{font-size:10px;color:#fff;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mock-queue-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}.mock-complete{background:linear-gradient(145deg,#173317,#121712);border:1px solid #31f22f;border-radius:18px;padding:18px;text-align:center;margin:12px 0}.mock-complete h2{color:#31f22f!important;margin:0}.mock-history{font-size:10px;padding:6px 0;border-bottom:1px solid #28282c;color:#ddd}.mock-controls [data-testid="stHorizontalBlock"]{gap:5px!important}.mock-view-toggle [data-testid="stHorizontalBlock"]{gap:5px!important}
+.shiva-live-card{background:linear-gradient(145deg,#182018,#111411);border:1px solid #315431;border-radius:16px;padding:13px;margin:10px 0 12px;box-shadow:0 0 24px rgba(49,242,47,.07)}
+.shiva-live-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.shiva-live-kicker{color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.10em;text-transform:uppercase}.shiva-live-title{color:#fff;font-size:18px;font-weight:1000;line-height:1.1;margin-top:4px}.shiva-live-context{color:#a8aaa9;font-size:10px;line-height:1.45;margin-top:7px}.shiva-live-pill{flex:0 0 auto;border:1px solid #396639;border-radius:999px;padding:5px 8px;color:#31f22f;font-size:8px;font-weight:1000;white-space:nowrap}.shiva-live-answer{background:#111512;border:1px solid #315431;border-left:5px solid #31f22f;border-radius:14px;padding:13px;margin:8px 0 12px}.shiva-live-answer-title{color:#31f22f;font-size:20px;font-weight:1000;line-height:1.15}.shiva-live-answer-why{color:#ebedeb;font-size:11px;line-height:1.5;margin-top:7px}.st-key-mock_who_should_i_pick button{min-height:58px!important;background:#31f22f!important;color:#061006!important;border-color:#31f22f!important;box-shadow:0 0 20px rgba(49,242,47,.24)!important;font-size:15px!important;letter-spacing:.02em!important}.st-key-mock_who_should_i_pick button:disabled{background:#263027!important;color:#7e8d7f!important;border-color:#344034!important;box-shadow:none!important}
 @keyframes mockPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
 button[kind="secondary"]{transition:all .12s ease}
-@media(min-width:800px){.block-container{max-width:1180px!important}.mock-player-name{font-size:13px}.mock-board{min-width:980px}}
-@media(max-width:430px){html,body,.stApp,.block-container{max-width:100vw!important;overflow-x:hidden!important}.mock-topbar{grid-template-columns:repeat(3,minmax(0,1fr))}.mock-chip{padding:7px 5px}.mock-chip-value{font-size:13px}.mock-list-head{grid-template-columns:30px minmax(0,1fr) 42px 48px;padding-left:6px;padding-right:6px}.mock-player-name{font-size:11px}.mock-player-meta{font-size:8px}.mock-board-wrap{max-width:calc(100vw - 24px)}}
+@media(min-width:800px){.block-container{max-width:1180px!important}.mock-player-name{font-size:13px}.mock-board{min-width:980px}.shiva-live-card{padding:15px 16px}.shiva-live-title{font-size:20px}}
+@media(max-width:430px){html,body,.stApp,.block-container{max-width:100vw!important;overflow-x:hidden!important}.mock-topbar{grid-template-columns:repeat(3,minmax(0,1fr))}.mock-chip{padding:7px 5px}.mock-chip-value{font-size:13px}.mock-list-head{grid-template-columns:30px minmax(0,1fr) 42px 48px;padding-left:6px;padding-right:6px}.mock-player-name{font-size:11px}.mock-player-meta{font-size:8px}.mock-board-wrap{max-width:calc(100vw - 24px)}.shiva-live-card{position:relative;padding:12px}.shiva-live-title{font-size:17px}.st-key-mock_who_should_i_pick button{min-height:56px!important;font-size:14px!important}}
 </style>
 """,
         unsafe_allow_html=True,
@@ -163,6 +165,7 @@ def _live_timer_fragment() -> None:
         st.session_state[_state_key()] = state
         st.rerun()
 
+
 def _render_controls(state: dict[str, Any], original_pool: list[dict[str, Any]]) -> None:
     cols = st.columns(4)
     with cols[0]:
@@ -177,6 +180,114 @@ def _render_controls(state: dict[str, Any], original_pool: list[dict[str, Any]])
     with cols[3]:
         if st.button("↻ Restart", use_container_width=True, key="mock_restart"):
             st.session_state[_state_key()] = restart_draft(state, original_pool); st.rerun()
+
+
+def _roster_summary(state: dict[str, Any]) -> str:
+    roster = team_by_id(state, state["userTeamId"])["roster"]
+    counts: dict[str, int] = {"RB": 0, "WR": 0, "QB": 0, "TE": 0}
+    for player in roster:
+        pos = str(player.get("position") or "").upper()
+        if pos in counts:
+            counts[pos] += 1
+    return " · ".join(f"{pos} {counts[pos]}" for pos in ("RB", "WR", "QB", "TE"))
+
+
+def _top_available_summary(state: dict[str, Any], limit: int = 4) -> str:
+    pool = sorted(
+        list(state.get("availablePlayers") or []),
+        key=lambda p: (p.get("rank", 9999), p.get("adp", 9999), p.get("name", "")),
+    )[:limit]
+    if not pool:
+        return "No players available"
+    return " · ".join(f"{p['name']} ({p['position']})" for p in pool)
+
+
+def _run_pick_advisor(
+    state: dict[str, Any],
+    history: pd.DataFrame,
+    roi: pd.DataFrame,
+    rankings: pd.DataFrame,
+    weekly: pd.DataFrame,
+    ask_shiva_func,
+    api_key: str | None,
+) -> None:
+    if not api_key:
+        st.warning("Connect the OpenAI API key in Shiva Intelligence first.")
+        return
+    live_context = full_draft_context(state)
+    live_context["oneTapDecision"] = True
+    live_context["decisionPrompt"] = "Who should I pick right now?"
+    with st.spinner("Shiva is reading your roster, the board and your next-pick options..."):
+        answer = ask_shiva_func(
+            question="Who should I pick right now?",
+            history=history,
+            roi=roi,
+            rankings=rankings,
+            weekly=weekly,
+            api_key=api_key,
+            draft_context=live_context,
+        )
+    st.session_state["mock_shiva_answer"] = answer
+    st.session_state["mock_shiva_answer_pick"] = int(state["currentOverallPick"])
+
+
+def _render_pick_advisor(
+    state: dict[str, Any],
+    history: pd.DataFrame,
+    roi: pd.DataFrame,
+    rankings: pd.DataFrame,
+    weekly: pd.DataFrame,
+    ask_shiva_func,
+    api_key: str | None,
+) -> None:
+    on_clock = state["status"] == "active" and not state["paused"] and state["currentTeam"] == state["userTeamId"]
+    current_pick = int(state["currentOverallPick"])
+    if st.session_state.get("mock_shiva_answer_pick") not in (None, current_pick):
+        st.session_state.pop("mock_shiva_answer", None)
+        st.session_state.pop("mock_shiva_answer_pick", None)
+
+    needs = roster_needs(state, state["userTeamId"])
+    open_starters = [f"{pos} {count}" for pos, count in needs.items() if count > 0 and pos not in {"BENCH", "FLEX"}]
+    status = "YOU'RE ON THE CLOCK" if on_clock else "LIVE DRAFT ADVISOR"
+    context_text = (
+        f"Roster: {_roster_summary(state)}. "
+        f"Open starters: {', '.join(open_starters) if open_starters else 'none'}. "
+        f"Top board: {_top_available_summary(state)}."
+    )
+    st.markdown(
+        f"""
+        <div class="shiva-live-card">
+          <div class="shiva-live-head">
+            <div>
+              <div class="shiva-live-kicker">🧠 ASK SHIVA · LIVE DECISION</div>
+              <div class="shiva-live-title">Who should I pick?</div>
+              <div class="shiva-live-context">{html.escape(context_text)}</div>
+            </div>
+            <div class="shiva-live-pill">{status}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        "🧠 WHO SHOULD I PICK?",
+        key="mock_who_should_i_pick",
+        use_container_width=True,
+        disabled=not on_clock,
+        help="Shiva reads your roster, every available player, current pick, next pick, ADP, scarcity and historical context before answering.",
+    ):
+        _run_pick_advisor(state, history, roi, rankings, weekly, ask_shiva_func, api_key)
+
+    answer = st.session_state.get("mock_shiva_answer")
+    if answer and st.session_state.get("mock_shiva_answer_pick") == current_pick:
+        title = html.escape(str(answer.get("answer") or ""))
+        why = html.escape(str(answer.get("why") or ""))
+        why_html = f'<div class="shiva-live-answer-why">{why}</div>' if why else ""
+        st.markdown(
+            f'<div class="shiva-live-answer"><div class="shiva-live-kicker">SHIVA\'S PICK</div>'
+            f'<div class="shiva-live-answer-title">{title}</div>{why_html}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def _render_recommendations(state: dict[str, Any]) -> None:
@@ -319,25 +430,31 @@ def _render_board(state: dict[str, Any]) -> None:
 
 
 def _render_ask_shiva(state: dict[str, Any], history: pd.DataFrame, roi: pd.DataFrame, rankings: pd.DataFrame, weekly: pd.DataFrame, ask_shiva_func, api_key: str | None) -> None:
-    with st.expander("🧠 Ask Shiva — Live Draft", expanded=False):
+    with st.expander("🧠 Ask Shiva — More Live Draft Questions", expanded=False):
         quick = st.columns(3)
-        quick_questions = ["Who should I draft?", "RB or WR?", "Best value?"]
+        quick_questions = ["RB or WR?", "Best value?", "Who makes it back?"]
         for col, q in zip(quick, quick_questions):
             with col:
-                if st.button(q, key=f"mock_shiva_{q}", use_container_width=True): st.session_state["mock_shiva_prompt"] = q
+                if st.button(q, key=f"mock_shiva_{q}", use_container_width=True):
+                    st.session_state["mock_shiva_prompt"] = q
         prompt = st.text_input("Ask about this live board", value=st.session_state.get("mock_shiva_prompt", ""), key="mock_shiva_input")
         if st.button("ASK SHIVA GPT", key="mock_ask_shiva", use_container_width=True):
-            if not prompt.strip(): st.warning("Ask a draft question first.")
-            elif not api_key: st.warning("Connect the OpenAI API key in Shiva Intelligence first.")
+            if not prompt.strip():
+                st.warning("Ask a draft question first.")
+            elif not api_key:
+                st.warning("Connect the OpenAI API key in Shiva Intelligence first.")
             else:
                 with st.spinner("Shiva is reading the live board..."):
                     st.session_state["mock_shiva_answer"] = ask_shiva_func(
-                        question=prompt, history=history, roi=roi, rankings=rankings, weekly=weekly,
-                        api_key=api_key, draft_context=full_draft_context(state),
+                        question=prompt,
+                        history=history,
+                        roi=roi,
+                        rankings=rankings,
+                        weekly=weekly,
+                        api_key=api_key,
+                        draft_context=full_draft_context(state),
                     )
-        answer = st.session_state.get("mock_shiva_answer")
-        if answer:
-            st.markdown(f'<div class="report"><div class="report-title">🧠 SHIVA LIVE DRAFT</div><div class="report-answer">{html.escape(str(answer.get("answer") or ""))}</div><div class="report-note">{html.escape(str(answer.get("why") or ""))}</div></div>', unsafe_allow_html=True)
+                    st.session_state["mock_shiva_answer_pick"] = int(state["currentOverallPick"])
 
 
 def _render_complete(state: dict[str, Any], db_path) -> None:
@@ -419,6 +536,7 @@ def render_mock_draft_room(
     _render_top_status(state)
     _live_timer_fragment()
     _render_controls(state, original_pool)
+    _render_pick_advisor(state, history, roi, rankings, weekly, ask_shiva_func, api_key)
     _render_recommendations(state)
 
     view_cols = st.columns(2)
