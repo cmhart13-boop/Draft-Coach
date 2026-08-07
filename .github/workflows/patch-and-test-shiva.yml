@@ -1,4 +1,4 @@
-name: Test Ask Shiva GPT
+name: Test Shiva App
 
 on:
   push:
@@ -6,15 +6,19 @@ on:
     paths:
       - shiva_query_router.py
       - shiva_chatgpt_service.py
+      - mock_draft_engine.py
+      - mock_draft_ui.py
       - scripts/regression_checks.py
+      - scripts/mock_draft_regression.py
+      - scripts/patch_mock_draft_room.py
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  test-ask-shiva:
+  test-shiva-app:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -30,8 +34,26 @@ jobs:
       - name: Install test dependencies
         run: pip install pandas numpy openai streamlit
 
+      - name: Integrate Mock Draft into existing app
+        run: python scripts/patch_mock_draft_room.py
+
       - name: Run Ask Shiva regression checks
         run: python scripts/regression_checks.py
 
-      - name: Compile production Ask Shiva modules
-        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py
+      - name: Run all 26 Mock Draft regression checks
+        run: python scripts/mock_draft_regression.py
+
+      - name: Compile production modules
+        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py
+
+      - name: Commit integrated app if patch changed it
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          if git diff --cached --quiet; then
+            echo "Mock Draft integration already present."
+            exit 0
+          fi
+          git commit -m "Integrate 2026 interactive mock draft room"
+          git push
