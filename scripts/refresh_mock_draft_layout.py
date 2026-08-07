@@ -55,9 +55,9 @@ new_available = r'''def _render_available(state: dict[str, Any], history: pd.Dat
     st.markdown('<div class="mock-section-title">AVAILABLE PLAYERS</div>', unsafe_allow_html=True)
     st.caption('Players are stacked by 2026 rank / ADP. Tap a player name for analytics, or use Queue / Draft.')
 
-    search = st.text_input('Search available players', placeholder='Search player', key='mock_search', label_visibility='collapsed')
+    search = st.text_input("Search", placeholder='Search player', key='mock_search', label_visibility='collapsed')
     pos = st.segmented_control(
-        'Position', ['ALL', 'QB', 'RB', 'WR', 'TE', 'D/ST', 'K'],
+        "Position", ["ALL", "QB", "RB", "WR", "TE", "D/ST", "K"],
         default='ALL', key='mock_position_filter', label_visibility='collapsed'
     ) or 'ALL'
 
