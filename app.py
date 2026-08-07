@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import math
 import re
 import sqlite3
@@ -13,8 +14,90 @@ import streamlit as st
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
 RANKINGS_PATH = APP_DIR / "current_rankings.csv"
+SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 st.set_page_config(page_title="Shiva Draft Intelligence", page_icon="🏆", layout="centered", initial_sidebar_state="collapsed")
+
+# Show the branded startup screen only once per browser session.
+if "shiva_splash_seen" not in st.session_state:
+    st.session_state.shiva_splash_seen = True
+    if SPLASH_PATH.exists():
+        splash_b64 = base64.b64encode(SPLASH_PATH.read_bytes()).decode("ascii")
+        st.markdown(
+            f"""
+<style>
+#shiva-startup-splash{{
+  position:fixed;
+  inset:0;
+  z-index:2147483647;
+  background:#06168f;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  pointer-events:none;
+  animation:shivaSplashShell 2.8s cubic-bezier(.22,.8,.24,1) forwards;
+}}
+#shiva-startup-splash .splash-phone{{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#06168f;
+}}
+#shiva-startup-splash img{{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+  transform-origin:center center;
+  animation:shivaSplashImage 2.8s cubic-bezier(.22,.8,.24,1) forwards;
+}}
+#shiva-startup-splash .splash-glow{{
+  position:absolute;
+  inset:-18%;
+  background:radial-gradient(circle at 50% 48%,rgba(179,255,0,.13),transparent 42%);
+  mix-blend-mode:screen;
+  animation:shivaSplashGlow 2.8s ease-out forwards;
+}}
+@keyframes shivaSplashShell{{
+  0%{{opacity:0;visibility:visible}}
+  7%{{opacity:1}}
+  84%{{opacity:1;visibility:visible}}
+  100%{{opacity:0;visibility:hidden}}
+}}
+@keyframes shivaSplashImage{{
+  0%{{transform:translate3d(0,22px,0) scale(1.075);filter:brightness(.82) saturate(1.04)}}
+  10%{{transform:translate3d(0,0,0) scale(1.025);filter:brightness(1.05) saturate(1.08)}}
+  72%{{transform:translate3d(0,0,0) scale(1.00);filter:brightness(1) saturate(1.04)}}
+  100%{{transform:translate3d(0,-20px,0) scale(1.025);filter:brightness(.92) saturate(1.02)}}
+}}
+@keyframes shivaSplashGlow{{
+  0%{{opacity:0;transform:scale(.92)}}
+  18%{{opacity:1;transform:scale(1)}}
+  76%{{opacity:.65}}
+  100%{{opacity:0;transform:scale(1.06)}}
+}}
+@media (min-width:700px){{
+  #shiva-startup-splash{{background:#050506}}
+  #shiva-startup-splash .splash-phone{{
+    left:50%;right:auto;width:min(430px,100vw);transform:translateX(-50%);
+    box-shadow:0 0 70px rgba(20,64,255,.24);
+  }}
+}}
+</style>
+<div id="shiva-startup-splash" aria-hidden="true">
+  <div class="splash-phone">
+    <img src="data:image/jpeg;base64,{splash_b64}" alt="" />
+    <div class="splash-glow"></div>
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 st.markdown("""
 <style>
