@@ -6,6 +6,7 @@ on:
     paths:
       - shiva_query_router.py
       - espn_news_service.py
+      - espn_news_cache.json
       - scripts/patch_app_query_news.py
       - scripts/regression_checks.py
       - .github/workflows/patch-and-test-shiva.yml
