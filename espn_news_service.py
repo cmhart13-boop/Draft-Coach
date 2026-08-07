@@ -14,6 +14,7 @@ ESPN_RSS_URL = "https://www.espn.com/espn/rss/nfl/news"
 ESPN_JSON_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=20"
 USER_AGENT = "Mozilla/5.0 (compatible; ShivaDraft/1.0; +https://streamlit.app)"
 CACHE_PATH = Path(__file__).resolve().parent / "espn_news_cache.json"
+MEDIA_NS = "http://search.yahoo.com/mrss/"
 
 
 def _request(url: str, accept: str, timeout: int = 12) -> tuple[bytes, str, int]:
@@ -41,6 +42,24 @@ def _request(url: str, accept: str, timeout: int = 12) -> tuple[bytes, str, int]
         raise
 
 
+def _rss_thumbnail(item: ET.Element) -> str:
+    candidates: list[str] = []
+    for tag in [
+        f"{{{MEDIA_NS}}}thumbnail",
+        f"{{{MEDIA_NS}}}content",
+        "thumbnail",
+        "image",
+        "enclosure",
+    ]:
+        for node in item.findall(tag):
+            url = str(node.attrib.get("url") or "").strip()
+            if url:
+                candidates.append(url)
+            if node.text and str(node.text).strip().startswith("http"):
+                candidates.append(str(node.text).strip())
+    return next((url for url in candidates if url.startswith("http")), "")
+
+
 def _parse_rss(payload: bytes) -> list[dict[str, str]]:
     try:
         root = ET.fromstring(payload)
@@ -62,9 +81,25 @@ def _parse_rss(payload: bytes) -> list[dict[str, str]]:
                 "description": description,
                 "link": link,
                 "published": published,
+                "thumbnail": _rss_thumbnail(item),
                 "source": "ESPN RSS",
             })
     return stories
+
+
+def _json_thumbnail(article: dict[str, Any]) -> str:
+    images = article.get("images") or []
+    if isinstance(images, list):
+        ranked = sorted(
+            [img for img in images if isinstance(img, dict)],
+            key=lambda img: (int(img.get("width") or 0) * int(img.get("height") or 0)),
+            reverse=True,
+        )
+        for image in ranked:
+            url = str(image.get("url") or image.get("href") or "").strip()
+            if url.startswith("http"):
+                return url
+    return ""
 
 
 def _parse_json(payload: bytes) -> list[dict[str, str]]:
@@ -81,6 +116,7 @@ def _parse_json(payload: bytes) -> list[dict[str, str]]:
                 "description": str(article.get("description") or "").strip(),
                 "link": link,
                 "published": str(article.get("published") or article.get("lastModified") or "").strip(),
+                "thumbnail": _json_thumbnail(article),
                 "source": "ESPN JSON",
             })
     return stories
@@ -105,7 +141,11 @@ def _read_cache() -> list[dict[str, str]]:
         return []
     try:
         data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-        return list(data.get("stories", []) or [])
+        stories = list(data.get("stories", []) or [])
+        for story in stories:
+            if isinstance(story, dict):
+                story.setdefault("thumbnail", "")
+        return stories
     except Exception:
         LOGGER.exception("Could not read ESPN cache path=%s", CACHE_PATH)
         return []
