@@ -29,7 +29,7 @@ jobs:
 
       - name: Commit refreshed cache
         run: |
-          if git diff --quiet -- espn_news_cache.json; then
+          if [ -z "$(git status --porcelain -- espn_news_cache.json)" ]; then
             echo "No news cache changes to commit."
             exit 0
           fi
