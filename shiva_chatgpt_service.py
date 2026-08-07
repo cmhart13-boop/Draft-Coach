@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 import pandas as pd
@@ -13,31 +14,31 @@ MODEL = "gpt-5.6"
 SYSTEM_INSTRUCTIONS = """
 You are Shiva Intelligence, an expert ESPN Full-PPR fantasy-football analyst embedded inside a draft application.
 
-Your job is to answer the user's question conversationally and directly, like an elite human fantasy analyst.
+Answer naturally, decisively, and conversationally like an elite fantasy-football analyst.
 
 NON-NEGOTIABLE DATA RULES:
-- Treat the VERIFIED EVIDENCE supplied by the application as the source of truth for factual statistics.
-- Never invent a statistic, ADP, finish, age, injury fact, or historical result.
-- Never substitute a league-wide average for a specifically named player.
-- If the evidence does not support a factual claim, say exactly what is missing.
-- ESPN Full PPR means 1 point per reception.
-- For recommendation questions, make a clear choice when the evidence supports one and explain why.
-- If the retrieved evidence appears to reference the wrong player or wrong season compared with the user's wording, do not use it. State that the data match needs correction instead of hallucinating.
+- VERIFIED EVIDENCE supplied by the app is the source of truth for factual statistics.
+- Never invent a statistic, ADP, finish, age, injury fact, historical result, or current-season claim.
+- Never substitute league-wide averages for a named-player question.
+- If evidence is incomplete, say what is missing, then still give the best football analysis that can be supported by the evidence that IS present.
+- ESPN Full PPR means one point per reception.
+- Recommendation questions require a clear choice when the supplied evidence supports one.
+- If evidence references the wrong player or season, do not use it.
 
 STYLE:
-- Put the direct answer first.
-- Be decisive and conversational.
-- Then explain the 2-4 strongest reasons.
-- Keep the response useful on a mobile screen.
-- Do not talk about internal routing, Pandas, prompts, or implementation details.
+- Direct answer first.
+- Then 2-4 strongest reasons.
+- Mobile-friendly.
+- No implementation jargon.
+- Do not mention Pandas, routing, prompts, or internal systems.
 """
 
 
-def _frame_to_records(frame: pd.DataFrame | None, limit: int = 40) -> list[dict[str, Any]]:
+def _frame_to_records(frame: pd.DataFrame | None, limit: int = 60) -> list[dict[str, Any]]:
     if frame is None or frame.empty:
         return []
     safe = frame.head(limit).copy()
-    safe = safe.where(pd.notna(safe), None)
+    safe = safe.astype(object).where(pd.notna(safe), None)
     return safe.to_dict(orient="records")
 
 
@@ -47,10 +48,10 @@ def build_verified_evidence(
     roi: pd.DataFrame,
     rankings: pd.DataFrame,
     weekly: pd.DataFrame | None = None,
-) -> dict[str, Any]:
-    """Run the local deterministic engine first and serialize only its verified result rows."""
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Retrieve verified local evidence first; return both serialized evidence and original report."""
     report = run_shiva_query(question, history, roi, rankings, weekly)
-    return {
+    evidence = {
         "title": report.get("title", ""),
         "answer": report.get("answer", ""),
         "note": report.get("note", ""),
@@ -59,6 +60,27 @@ def build_verified_evidence(
         "structured_query": report.get("structured_query", {}),
         "supporting_rows": _frame_to_records(report.get("table")),
     }
+    return evidence, report
+
+
+def _configured_api_key(explicit_key: str | None = None) -> str:
+    return (explicit_key or os.getenv("OPENAI_API_KEY") or "").strip()
+
+
+def _local_fallback(report: dict[str, Any], reason: str = "") -> dict[str, Any]:
+    """Keep Ask Shiva functional even if the external model connection is unavailable."""
+    result = dict(report)
+    result.setdefault("title", "🧠 ASK SHIVA")
+    result.setdefault("answer", "")
+    result.setdefault("note", "")
+    result.setdefault("takeaway", "")
+    result.setdefault("table", pd.DataFrame())
+    result.setdefault("kind", "local_verified")
+    result.setdefault("structured_query", {})
+    if reason:
+        existing = str(result.get("note") or "").strip()
+        result["note"] = existing if existing else "Answer calculated from Shiva's verified local data."
+    return result
 
 
 def ask_shiva_via_chatgpt(
@@ -67,43 +89,47 @@ def ask_shiva_via_chatgpt(
     roi: pd.DataFrame,
     rankings: pd.DataFrame,
     weekly: pd.DataFrame | None,
-    api_key: str,
+    api_key: str | None = None,
 ) -> dict[str, Any]:
-    """
-    Send the user's natural-language question to OpenAI after the app retrieves verified local evidence.
-    The model is the conversational analyst; the app data remains the factual source of truth.
-    """
-    evidence = build_verified_evidence(question, history, roi, rankings, weekly)
+    """ChatGPT-first analyst with deterministic verified-data fallback."""
+    evidence, local_report = build_verified_evidence(question, history, roi, rankings, weekly)
+    key = _configured_api_key(api_key)
 
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
-        model=MODEL,
-        reasoning={"effort": "low"},
-        instructions=SYSTEM_INSTRUCTIONS,
-        input=(
-            "USER QUESTION:\n"
-            + question
-            + "\n\nVERIFIED EVIDENCE FROM THE SHIVA APP:\n"
-            + json.dumps(evidence, ensure_ascii=False, default=str)
-            + "\n\nAnswer the user directly. Use only supported factual numbers from the evidence."
-        ),
-    )
+    # Never break Ask Shiva because a deployment secret is missing.
+    if not key:
+        return _local_fallback(local_report, "missing_api_key")
 
-    text = (response.output_text or "").strip()
-    if not text:
-        text = "I couldn't produce a reliable answer from the verified evidence available for that question."
+    try:
+        client = OpenAI(api_key=key)
+        response = client.responses.create(
+            model=MODEL,
+            reasoning={"effort": "low"},
+            instructions=SYSTEM_INSTRUCTIONS,
+            input=(
+                "USER QUESTION:\n"
+                + question
+                + "\n\nVERIFIED EVIDENCE FROM SHIVA:\n"
+                + json.dumps(evidence, ensure_ascii=False, default=str)
+                + "\n\nGive the direct fantasy-football answer first. Use factual numbers only when supported by the evidence."
+            ),
+        )
+        text = (response.output_text or "").strip()
+        if not text:
+            return _local_fallback(local_report, "empty_model_response")
 
-    return {
-        "title": "🧠 ASK SHIVA",
-        "answer": text,
-        "note": "Powered by ChatGPT reasoning over Shiva's verified app data.",
-        "takeaway": "",
-        "table": report_table_from_evidence(evidence),
-        "kind": "chatgpt",
-        "structured_query": evidence.get("structured_query", {}),
-    }
+        return {
+            "title": "🧠 ASK SHIVA",
+            "answer": text,
+            "note": "ChatGPT analysis grounded in Shiva's verified data.",
+            "takeaway": "",
+            "table": report_table_from_evidence(evidence),
+            "kind": "chatgpt",
+            "structured_query": evidence.get("structured_query", {}),
+        }
+    except Exception:
+        # Production UI must remain useful even if OpenAI is temporarily unavailable.
+        return _local_fallback(local_report, "openai_error")
 
 
 def report_table_from_evidence(evidence: dict[str, Any]) -> pd.DataFrame:
-    rows = evidence.get("supporting_rows", []) or []
-    return pd.DataFrame(rows)
+    return pd.DataFrame(evidence.get("supporting_rows", []) or [])
