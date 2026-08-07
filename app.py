@@ -14,6 +14,7 @@ from shiva_engine import build_history_frame
 from shiva_query_router import run_shiva_query
 from shiva_chatgpt_service import ask_shiva_via_chatgpt
 from espn_news_service import fetch_espn_news
+from mock_draft_ui import render_mock_draft_room
 
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
@@ -324,23 +325,25 @@ elif page == "Draft Coach":
             st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["Round"])}</div><div><div class="player">{pick["Player"]} ({pick["Pos"]})</div><div class="meta">Pick {int(pick["Pick"])} · Alternatives: {pick["Alternatives"] or "—"}</div></div><div class="tag">ADP {pick["ADP"]:.1f}</div></div>', unsafe_allow_html=True)
 
 elif page == "Mock Draft":
-    st.markdown('<div class="hero"><div class="kicker">🧩 Mock Draft</div><div class="hero-title">Who Should You Take Now?</div><div class="hero-sub">Choose your league size, draft slot and current overall pick. Recommendations update from current ESPN ADP.</div></div>', unsafe_allow_html=True)
-    mock_cols = st.columns(3)
-    with mock_cols[0]:
-        teams = st.number_input("Teams", 8, 16, 10, 1, key="mock_teams")
-    with mock_cols[1]:
-        slot = st.number_input("Draft Slot", 1, int(teams), min(4, int(teams)), 1, key="mock_slot")
-    with mock_cols[2]:
-        current_pick = st.number_input("Current Pick", 1, int(teams) * 20, 1, 1, key="mock_pick")
-    schedule = pd.DataFrame(snake_schedule(int(slot), int(teams), 20))
-    future = schedule[schedule["Overall"].ge(int(current_pick))]
-    next_pick = int(future.iloc[0]["Overall"]) if not future.empty else None
-    picks_until = max(0, next_pick - int(current_pick)) if next_pick is not None else None
-    st.markdown(f'<div class="metric-grid"><div class="metric"><div class="metric-label">Current Pick</div><div class="metric-value">{int(current_pick)}</div></div><div class="metric"><div class="metric-label">Your Next Pick</div><div class="metric-value blue">{next_pick or "—"}</div></div><div class="metric"><div class="metric-label">Picks Until You</div><div class="metric-value green">{picks_until if picks_until is not None else "—"}</div></div></div>', unsafe_allow_html=True)
-    recommendation_pick = next_pick or int(current_pick)
-    rnd = max(1, math.ceil(recommendation_pick / int(teams)))
-    for _, player in player_fit(recommendation_pick, rnd).head(10).iterrows():
-        st.markdown(f'<div class="player-card"><div class="pos">{player["position"]}</div><div><div class="player">{player["player_name"]}</div><div class="meta">ESPN ADP {player["adp"]:.1f} · {player["availability"]}</div></div><div class="tag">{player["fit"]}</div></div>', unsafe_allow_html=True)
+    # One centralized draft state powers both Players and Draft Board views.
+    try:
+        secret_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()
+    except Exception:
+        secret_key = ""
+    mock_api_key = (
+        str(os.environ.get("OPENAI_API_KEY", "")).strip()
+        or secret_key
+        or str(st.session_state.get("shiva_openai_api_key", "")).strip()
+    )
+    render_mock_draft_room(
+        rankings=rankings,
+        weekly=weekly,
+        history=history,
+        roi=roi,
+        db_path=DB_PATH,
+        ask_shiva_func=ask_shiva_via_chatgpt,
+        api_key=mock_api_key or None,
+    )
 
 else:
     st.markdown('<div class="hero"><div class="kicker">🏛️ Shiva League History</div><div class="hero-title">Search Historical Drafts</div><div class="hero-sub">Filter by league, current manager and season.</div></div>', unsafe_allow_html=True)
