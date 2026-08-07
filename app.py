@@ -86,12 +86,10 @@ def load_births() -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=False)
 def load_weekly() -> pd.DataFrame:
-    """Load only weekly columns used by Shiva/Mock Draft and share one in-memory frame.
+    """Load only weekly columns actually used by Shiva/Mock Draft.
 
-    The full compressed master expands dramatically in RAM. Streamlit cache_data also
-    serializes/copies the dataframe per session, which can push Community Cloud over its
-    memory limit. cache_resource keeps one shared read-only dataframe and usecols avoids
-    loading dozens of unused NFL stat columns.
+    The compressed weekly master expands dramatically in memory. cache_resource keeps
+    one shared read-only frame instead of serializing/copying it per Streamlit session.
     """
     if not WEEKLY_PATH.exists():
         return pd.DataFrame()
@@ -111,11 +109,10 @@ def load_weekly() -> pd.DataFrame:
         usecols=usecols or None,
         low_memory=False,
     )
-
 roi = load_roi()
 rankings = load_rankings()
 births = load_births()
-weekly = load_weekly()
+weekly = None
 for col in ["season", "round", "overall_pick", "position_draft_rank", "position_finish_total", "fantasy_points_ppr", "ppg", "games_played", "final_draft_roi"]:
     if col in roi.columns:
         roi[col] = pd.to_numeric(roi[col], errors="coerce")
@@ -304,7 +301,7 @@ if page == "Shiva Intelligence":
                         history=history,
                         roi=roi,
                         rankings=rankings,
-                        weekly=weekly,
+                        weekly=load_weekly(),
                         api_key=configured_api_key,
                     )
             except Exception as exc:
@@ -359,7 +356,7 @@ elif page == "Mock Draft":
     )
     render_mock_draft_room(
         rankings=rankings,
-        weekly=weekly,
+        weekly=load_weekly(),
         history=history,
         roi=roi,
         db_path=DB_PATH,
