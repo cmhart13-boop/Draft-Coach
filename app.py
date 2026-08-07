@@ -299,3 +299,57 @@ else:
         result = result[result["player_name"].str.contains(search.strip(), case=False, na=False)]
     for _, pick in result.sort_values(["season", "round", "overall_pick"], ascending=[False, True, True]).head(200).iterrows():
         st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["round"])}</div><div><div class="player">{pick["player_name"]} ({pick["position"]})</div><div class="meta">{int(pick["season"])} · {pick["league_name"]} · Pick {int(pick["overall_pick"])} · Final {pick["position_finish_total"]}</div></div><div class="tag">{float(pick["ppg"]):.1f} PPG</div></div>', unsafe_allow_html=True)
+
+# ============================================================
+# LIVE ESPN NFL NEWS FEED
+# Appended as a standalone UI component so existing app logic
+# above remains unchanged.
+# ============================================================
+import feedparser
+from html import escape
+
+ESPN_NFL_RSS_URL = "https://www.espn.com/espn/rss/nfl/news"
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_espn_news() -> list[dict[str, str]]:
+    feed = feedparser.parse(ESPN_NFL_RSS_URL)
+    stories: list[dict[str, str]] = []
+    for entry in getattr(feed, "entries", [])[:4]:
+        title = str(entry.get("title", "ESPN NFL News")).strip()
+        link = str(entry.get("link", "https://www.espn.com/fantasy/football/")).strip()
+        summary = str(entry.get("summary", "")).strip()
+        stories.append({"title": title, "link": link, "summary": summary})
+    return stories
+
+st.markdown("---")
+st.markdown(
+    """
+    <div style="margin:8px 0 12px 0;">
+      <div style="color:#31f22f;font-size:11px;font-weight:1000;letter-spacing:.1em;text-transform:uppercase;">📰 LIVE ESPN NFL NEWS</div>
+      <div style="color:#fff;font-size:24px;font-weight:1000;line-height:1.05;margin-top:5px;">Fantasy-Relevant Headlines</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+espn_stories = load_espn_news()
+if espn_stories:
+    news_cols = st.columns(4)
+    for idx, story in enumerate(espn_stories[:4]):
+        with news_cols[idx]:
+            safe_title = escape(story["title"])
+            safe_link = escape(story["link"], quote=True)
+            st.markdown(
+                f"""
+                <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:14px;min-height:205px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);">
+                  <div>
+                    <div style="color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">ESPN NFL</div>
+                    <div style="color:#fff;font-size:14px;font-weight:950;line-height:1.25;">{safe_title}</div>
+                  </div>
+                  <a href="{safe_link}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:14px;padding:11px 8px;border-radius:10px;background:#31f22f;color:#071007!important;text-decoration:none;text-align:center;font-size:10px;font-weight:1000;letter-spacing:.04em;">READ FULL ARTICLE</a>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+else:
+    st.info("ESPN headlines are temporarily unavailable. The feed will retry automatically.")
