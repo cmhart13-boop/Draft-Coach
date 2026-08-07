@@ -4,16 +4,23 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 text = APP.read_text(encoding="utf-8")
 
-old = '''    if submitted:\n        if prompt.strip():\n            api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()\n            if not api_key:\n                st.error("Ask Shiva is ready to use ChatGPT, but OPENAI_API_KEY has not been added to this app's Streamlit secrets yet.")\n            else:\n                try:\n                    with st.spinner("Shiva is analyzing the verified data..."):\n                        st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(\n                            question=prompt,\n                            history=history,\n                            roi=roi,\n                            rankings=rankings,\n                            weekly=weekly,\n                            api_key=api_key,\n                        )\n                except Exception as exc:\n                    st.error(f"Ask Shiva could not reach ChatGPT right now: {exc}")\n        else:\n            st.warning("Type a question first.")\n'''
+# 1) Rename the Ask Shiva submit button.
+text = text.replace(
+    'submitted = st.form_submit_button("Run Report", use_container_width=True)',
+    'submitted = st.form_submit_button("Ask ChatGPT", use_container_width=True)',
+)
 
-new = '''    if submitted:\n        if prompt.strip():\n            try:\n                api_key = str(st.secrets.get("OPENAI_API_KEY", "")).strip()\n            except Exception:\n                api_key = ""\n            try:\n                with st.spinner("Shiva is analyzing the verified data..."):\n                    st.session_state["shiva_report_dynamic"] = ask_shiva_via_chatgpt(\n                        question=prompt,\n                        history=history,\n                        roi=roi,\n                        rankings=rankings,\n                        weekly=weekly,\n                        api_key=api_key or None,\n                    )\n            except Exception:\n                # Last-resort verified local engine: Ask Shiva must never die on the user.\n                st.session_state["shiva_report_dynamic"] = run_shiva_query(\n                    prompt, history, roi, rankings, weekly\n                )\n        else:\n            st.warning("Type a question first.")\n'''
+# 2) Replace the old report renderer. Remove Draft Impact and Supporting Data entirely.
+old_renderer = '''def render_report(report: dict) -> None:\n    st.markdown(f'<div class="report"><div class="report-title">{report.get("title", "SHIVA REPORT")}</div><div class="report-answer">{report.get("answer", "")}</div><div class="report-note">{report.get("note", "")}</div></div>', unsafe_allow_html=True)\n    takeaway = report.get("takeaway", "")\n    if takeaway:\n        st.markdown(f'<div class="takeaway"><b>🔥 DRAFT IMPACT</b><br>{takeaway}</div>', unsafe_allow_html=True)\n    render_supporting_data(report)\n'''
 
-if old not in text:
-    print("Ask Shiva guard block already replaced or not found.")
+new_renderer = '''def render_report(report: dict) -> None:\n    answer = str(report.get("answer", "") or "").strip()\n    why = str(\n        report.get("why", "")\n        or report.get("takeaway", "")\n        or report.get("note", "")\n        or ""\n    ).strip()\n\n    st.markdown(\n        f'<div class="report"><div class="report-title">{report.get("title", "SHIVA REPORT")}</div><div class="report-answer">{answer}</div></div>',\n        unsafe_allow_html=True,\n    )\n\n    if why:\n        st.markdown(\n            f'''<div style="background:#171b17;border:1px solid #2c3b2c;border-radius:16px;padding:16px;margin:12px 0;">\n                <div style="color:#31f22f;font-size:12px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:9px;">WHY</div>\n                <div style="color:#f7f7f8;font-size:15px;line-height:1.5;font-weight:650;white-space:pre-wrap;">{why}</div>\n            </div>''',\n            unsafe_allow_html=True,\n        )\n'''
+
+if old_renderer in text:
+    text = text.replace(old_renderer, new_renderer)
 else:
-    text = text.replace(old, new)
+    print("render_report block already updated or did not match exactly.")
 
-# Clean duplicate path declarations introduced by earlier integration patches.
+# 3) Clean duplicate weekly path declarations if an older integration left any behind.
 needle = 'WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"\n'
 while text.count(needle) > 1:
     first = text.find(needle)
@@ -21,4 +28,4 @@ while text.count(needle) > 1:
     text = text[:second] + text[second + len(needle):]
 
 APP.write_text(text, encoding="utf-8")
-print("Ask Shiva now uses ChatGPT when configured and verified local fallback otherwise.")
+print("Ask Shiva layout updated: Ask ChatGPT button, answer-first card, WHY context, no Draft Impact, no Supporting Data.")
