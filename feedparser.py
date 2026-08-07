@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-"""ESPN news compatibility layer for the Streamlit app.
+"""ESPN-hardened compatibility feed parser for the Streamlit app.
 
-The live app already calls ``feedparser.parse(url)``. This local module keeps
-that interface but uses multiple live sources so the UI does not go blank when
-ESPN blocks a direct Streamlit Cloud request.
-
-Source order:
-1. ESPN NFL RSS
-2. ESPN general RSS
-3. ESPN public NFL news JSON endpoint
-4. Google News RSS restricted to ESPN.com NFL/fantasy articles
-
-Only live ESPN article headlines are returned to the app.
+This module exposes a tiny ``parse(url)`` interface compatible with the way
+``app.py`` uses feedparser.  It tries multiple ESPN transports and finally a
+Google News RSS query restricted to ESPN.com so the UI still receives ESPN
+article headlines when Streamlit Cloud cannot fetch ESPN's RSS directly.
 """
 
 import json
+import re
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from typing import Any
 
@@ -32,17 +27,18 @@ ESPN_RSS_FALLBACKS = (
     "https://www.espn.com/espn/rss/nfl/news",
     "https://www.espn.com/espn/rss/news",
 )
-
-ESPN_NFL_JSON = (
-    "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=12"
-)
-
-GOOGLE_ESPN_QUERY = urllib.parse.quote(
-    "site:espn.com NFL fantasy football"
-)
+ESPN_NFL_JSON = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=12"
+ESPN_NFL_PAGE = "https://www.espn.com/nfl/"
 GOOGLE_ESPN_RSS = (
-    "https://news.google.com/rss/search?q="
-    f"{GOOGLE_ESPN_QUERY}&hl=en-US&gl=US&ceid=US:en"
+    "https://news.google.com/rss/search?"
+    + urllib.parse.urlencode(
+        {
+            "q": "site:espn.com/nfl OR site:espn.com/fantasy/football ESPN NFL fantasy football",
+            "hl": "en-US",
+            "gl": "US",
+            "ceid": "US:en",
+        }
+    )
 )
 
 
@@ -55,9 +51,10 @@ def _fetch(url: str, accept: str) -> bytes:
             "Accept-Language": "en-US,en;q=0.9",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
+            "Referer": "https://www.espn.com/",
         },
     )
-    with urllib.request.urlopen(req, timeout=10) as response:
+    with urllib.request.urlopen(req, timeout=12) as response:
         return response.read()
 
 
@@ -68,93 +65,112 @@ def _text(node: ET.Element | None, tag: str) -> str:
     return (child.text or "").strip() if child is not None else ""
 
 
-def _parse_rss_bytes(payload: bytes, require_espn_source: bool = False) -> list[dict[str, str]]:
+def _parse_rss_bytes(payload: bytes) -> list[dict[str, str]]:
     root = ET.fromstring(payload)
     entries: list[dict[str, str]] = []
-
+    seen: set[str] = set()
     for item in root.findall(".//item"):
         title = _text(item, "title")
         link = _text(item, "link")
         summary = _text(item, "description")
-
-        if require_espn_source:
-            source = item.find("source")
-            source_name = ((source.text or "") if source is not None else "").strip().lower()
-            source_url = ((source.attrib.get("url") or "") if source is not None else "").strip().lower()
-            # Google News titles also commonly end in " - ESPN".
-            title_is_espn = title.lower().endswith(" - espn")
-            if "espn" not in source_name and "espn.com" not in source_url and not title_is_espn:
-                continue
-            if title_is_espn:
-                title = title[:-7].strip()
-
-        if title and link:
-            entries.append(
-                {
-                    "title": title,
-                    "link": link,
-                    "summary": summary,
-                }
-            )
-
+        if not title or not link or link in seen:
+            continue
+        seen.add(link)
+        entries.append({"title": title, "link": link, "summary": summary})
     return entries
 
 
 def _parse_espn_json(payload: bytes) -> list[dict[str, str]]:
     data: dict[str, Any] = json.loads(payload.decode("utf-8", errors="replace"))
     entries: list[dict[str, str]] = []
-
+    seen: set[str] = set()
     for article in data.get("articles", []) or []:
         title = str(article.get("headline") or article.get("title") or "").strip()
         summary = str(article.get("description") or "").strip()
         link = ""
-
         links = article.get("links") or {}
         if isinstance(links, dict):
             web = links.get("web") or {}
             if isinstance(web, dict):
                 link = str(web.get("href") or "").strip()
-
-            if not link:
-                mobile = links.get("mobile") or {}
-                if isinstance(mobile, dict):
-                    link = str(mobile.get("href") or "").strip()
-
         if not link:
             link = str(article.get("link") or "").strip()
-
-        if title and link:
-            entries.append(
-                {
-                    "title": title,
-                    "link": link,
-                    "summary": summary,
-                }
-            )
-
+        if title and link and link not in seen:
+            seen.add(link)
+            entries.append({"title": title, "link": link, "summary": summary})
     return entries
 
 
+class _ESPNLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entries: list[dict[str, str]] = []
+        self._href = ""
+        self._text_parts: list[str] = []
+        self._in_anchor = False
+        self._seen: set[str] = set()
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        href = dict(attrs).get("href") or ""
+        if "/nfl/story/_/id/" in href or "/fantasy/football/story/_/id/" in href:
+            self._href = href
+            self._text_parts = []
+            self._in_anchor = True
+
+    def handle_data(self, data: str) -> None:
+        if self._in_anchor:
+            cleaned = re.sub(r"\s+", " ", data).strip()
+            if cleaned:
+                self._text_parts.append(cleaned)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or not self._in_anchor:
+            return
+        title = re.sub(r"\s+", " ", " ".join(self._text_parts)).strip()
+        href = self._href
+        if href.startswith("/"):
+            href = "https://www.espn.com" + href
+        if title and href and href not in self._seen and len(title) > 12:
+            self._seen.add(href)
+            self.entries.append({"title": title, "link": href, "summary": ""})
+        self._href = ""
+        self._text_parts = []
+        self._in_anchor = False
+
+
+def _parse_espn_html(payload: bytes) -> list[dict[str, str]]:
+    parser = _ESPNLinkParser()
+    parser.feed(payload.decode("utf-8", errors="replace"))
+    return parser.entries
+
+
+def _parse_google_news(payload: bytes) -> list[dict[str, str]]:
+    entries = _parse_rss_bytes(payload)
+    cleaned: list[dict[str, str]] = []
+    for item in entries:
+        title = re.sub(r"\s+-\s+ESPN$", "", item["title"], flags=re.I).strip()
+        cleaned.append({"title": title, "link": item["link"], "summary": item.get("summary", "")})
+    return cleaned
+
+
 def parse(url: str, *args: Any, **kwargs: Any) -> SimpleNamespace:
-    """Return a feedparser-compatible object containing live ESPN stories."""
     tried: list[str] = []
 
-    # 1-2: ESPN RSS endpoints.
+    # 1) Requested ESPN RSS feed, then alternate ESPN RSS feed.
     urls = [url] + [candidate for candidate in ESPN_RSS_FALLBACKS if candidate != url]
     for candidate in urls:
         try:
             tried.append(candidate)
-            payload = _fetch(
-                candidate,
-                "application/rss+xml, application/xml, text/xml, */*;q=0.8",
-            )
+            payload = _fetch(candidate, "application/rss+xml, application/xml, text/xml, */*;q=0.8")
             entries = _parse_rss_bytes(payload)
             if entries:
                 return SimpleNamespace(entries=entries, bozo=False, href=candidate)
         except Exception:
-            continue
+            pass
 
-    # 3: ESPN JSON news service.
+    # 2) ESPN's public NFL JSON news service.
     try:
         tried.append(ESPN_NFL_JSON)
         payload = _fetch(ESPN_NFL_JSON, "application/json, text/plain, */*")
@@ -164,15 +180,22 @@ def parse(url: str, *args: Any, **kwargs: Any) -> SimpleNamespace:
     except Exception:
         pass
 
-    # 4: Google News as a transport fallback, restricted to ESPN articles.
-    # This is still an ESPN-only headline feed; Google only supplies the RSS transport.
+    # 3) Scrape ESPN's NFL homepage for direct ESPN article links.
+    try:
+        tried.append(ESPN_NFL_PAGE)
+        payload = _fetch(ESPN_NFL_PAGE, "text/html,application/xhtml+xml,*/*;q=0.8")
+        entries = _parse_espn_html(payload)
+        if entries:
+            return SimpleNamespace(entries=entries, bozo=False, href=ESPN_NFL_PAGE)
+    except Exception:
+        pass
+
+    # 4) Final transport fallback: Google News RSS restricted to ESPN.com.
+    #    Headlines remain ESPN articles; Google only provides the RSS transport.
     try:
         tried.append(GOOGLE_ESPN_RSS)
-        payload = _fetch(
-            GOOGLE_ESPN_RSS,
-            "application/rss+xml, application/xml, text/xml, */*;q=0.8",
-        )
-        entries = _parse_rss_bytes(payload, require_espn_source=True)
+        payload = _fetch(GOOGLE_ESPN_RSS, "application/rss+xml, application/xml, text/xml, */*")
+        entries = _parse_google_news(payload)
         if entries:
             return SimpleNamespace(entries=entries, bozo=False, href=GOOGLE_ESPN_RSS)
     except Exception:
