@@ -1,0 +1,48 @@
+name: Patch and Test Shiva
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - shiva_query_router.py
+      - espn_news_service.py
+      - scripts/patch_app_query_news.py
+      - scripts/regression_checks.py
+      - .github/workflows/patch-and-test-shiva.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pandas numpy
+
+      - name: Patch Streamlit app
+        run: python scripts/patch_app_query_news.py
+
+      - name: Run regression checks
+        run: python scripts/regression_checks.py
+
+      - name: Commit integration changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py espn_news_cache.json || true
+          if git diff --cached --quiet; then
+            echo "No integration changes to commit."
+            exit 0
+          fi
+          git commit -m "Integrate entity-first Shiva queries and resilient ESPN news"
+          git push
