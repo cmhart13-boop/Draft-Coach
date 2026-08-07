@@ -12,7 +12,7 @@ from shiva_query_router import run_shiva_query
 MODEL = "gpt-5.6"
 
 SYSTEM_INSTRUCTIONS = """
-You are Shiva Intelligence, an expert ESPN Full-PPR fantasy-football analyst embedded inside a draft application.
+You are Shiva GPT, an expert ESPN Full-PPR fantasy-football analyst embedded inside the Shiva Draft Intelligence application.
 
 Answer naturally, decisively, and conversationally like an elite fantasy-football analyst.
 
@@ -20,7 +20,7 @@ NON-NEGOTIABLE DATA RULES:
 - VERIFIED EVIDENCE supplied by the app is the source of truth for factual statistics.
 - Never invent a statistic, ADP, finish, age, injury fact, historical result, or current-season claim.
 - Never substitute league-wide averages for a named-player question.
-- If evidence is incomplete, say what is missing, then still give the best football analysis supported by the evidence that IS present.
+- If evidence is incomplete, clearly say what is missing, then give only the football analysis supported by the evidence that is present.
 - ESPN Full PPR means one point per reception.
 - Recommendation questions require a clear choice when the supplied evidence supports one.
 - If evidence references the wrong player or season, do not use it.
@@ -31,11 +31,15 @@ WHY:
 <2-4 concise paragraphs or bullets explaining the reasoning, context, and strongest verified evidence>
 
 STYLE:
-- Make FINAL ANSWER decisive and short enough to be the visual headline.
+- Direct answer first.
+- Make a clear choice when the user asks for a recommendation.
+- Keep FINAL ANSWER short enough to be the visual headline.
 - Put all explanation and context under WHY.
-- Mobile-friendly.
-- No implementation jargon.
-- Do not mention Pandas, routing, prompts, or internal systems.
+- Use relevant verified PPG, workload, age, consistency, ADP, positional value, historical finish, and other supplied evidence when appropriate.
+- Do not use vague phrases such as "the supporting rows are the evidence."
+- Do not mention Pandas, databases, prompts, routing, code, or internal systems.
+- Write like an elite fantasy-football analyst talking directly to the user.
+- Keep it concise enough to read comfortably on a phone.
 """
 
 
@@ -54,7 +58,7 @@ def build_verified_evidence(
     rankings: pd.DataFrame,
     weekly: pd.DataFrame | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Retrieve verified local evidence first; return both serialized evidence and original report."""
+    """Retrieve verified local evidence before asking the model to analyze it."""
     report = run_shiva_query(question, history, roi, rankings, weekly)
     evidence = {
         "title": report.get("title", ""),
@@ -73,9 +77,9 @@ def _configured_api_key(explicit_key: str | None = None) -> str:
 
 
 def _local_fallback(report: dict[str, Any], reason: str = "") -> dict[str, Any]:
-    """Keep Ask Shiva functional even if the external model connection is unavailable."""
+    """Keep Ask Shiva GPT usable if the external model connection is unavailable."""
     result = dict(report)
-    result.setdefault("title", "🧠 ASK SHIVA")
+    result["title"] = "🧠 ASK SHIVA GPT"
     result.setdefault("answer", "")
     result.setdefault("note", "")
     result.setdefault("takeaway", "")
@@ -84,13 +88,13 @@ def _local_fallback(report: dict[str, Any], reason: str = "") -> dict[str, Any]:
     result.setdefault("structured_query", {})
     why = str(result.get("takeaway") or result.get("note") or "").strip()
     if not why and reason:
-        why = "Answer calculated from Shiva's verified local data."
+        why = "This answer was generated from Shiva's verified local fantasy data because the live GPT connection was unavailable."
     result["why"] = why
     return result
 
 
 def _split_model_response(text: str) -> tuple[str, str]:
-    """Split ChatGPT's required FINAL ANSWER / WHY format into two UI-ready fields."""
+    """Split ChatGPT's FINAL ANSWER / WHY response into UI-ready fields."""
     cleaned = (text or "").strip()
     if not cleaned:
         return "", ""
@@ -128,7 +132,7 @@ def ask_shiva_via_chatgpt(
     weekly: pd.DataFrame | None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    """ChatGPT-first analyst with deterministic verified-data fallback."""
+    """GPT analyst grounded in deterministic verified Shiva evidence."""
     evidence, local_report = build_verified_evidence(question, history, roi, rankings, weekly)
     key = _configured_api_key(api_key)
 
@@ -146,7 +150,7 @@ def ask_shiva_via_chatgpt(
                 + question
                 + "\n\nVERIFIED EVIDENCE FROM SHIVA:\n"
                 + json.dumps(evidence, ensure_ascii=False, default=str)
-                + "\n\nReturn exactly two sections: FINAL ANSWER and WHY. Use factual numbers only when supported by the evidence."
+                + "\n\nReturn exactly two sections: FINAL ANSWER and WHY. Use factual numbers only when supported by the verified evidence."
             ),
         )
         text = (response.output_text or "").strip()
@@ -158,18 +162,14 @@ def ask_shiva_via_chatgpt(
             return _local_fallback(local_report, "empty_model_answer")
 
         return {
-            "title": "🧠 ASK SHIVA",
+            "title": "🧠 ASK SHIVA GPT",
             "answer": answer,
-            "why": why or "This recommendation is based on the verified Shiva evidence retrieved for your question.",
+            "why": why or "The recommendation is based on the verified Shiva evidence retrieved for this specific question.",
             "note": "",
             "takeaway": "",
-            "table": report_table_from_evidence(evidence),
+            "table": pd.DataFrame(),
             "kind": "chatgpt",
             "structured_query": evidence.get("structured_query", {}),
         }
     except Exception:
         return _local_fallback(local_report, "openai_error")
-
-
-def report_table_from_evidence(evidence: dict[str, Any]) -> pd.DataFrame:
-    return pd.DataFrame(evidence.get("supporting_rows", []) or [])
