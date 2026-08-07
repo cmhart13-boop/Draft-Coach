@@ -32,7 +32,7 @@ def load_data():
 
 
 def assert_contains(report, needle: str, label: str):
-    text = " ".join(str(report.get(k, "")) for k in ["title", "answer", "note", "takeaway"])
+    text = " ".join(str(report.get(k, "")) for k in ["title", "answer", "note", "takeaway", "why"])
     if needle.lower() not in text.lower():
         raise AssertionError(f"{label}: expected {needle!r} in report, got: {text}")
 
@@ -69,6 +69,15 @@ def main():
     if not names4.issubset({"Christian McCaffrey", "Bijan Robinson"}) or len(names4) != 2:
         raise AssertionError(f"TEST 4 supporting data contains unexpected players: {names4}")
     print(f"TEST 4 PASS: {r4['answer']}")
+
+    # Regression for the exact cross-position failure that previously selected QB by raw PPG.
+    r4b = run_shiva_query("Would you draft CeeDee Lamb or Josh Allen in round one?", history, roi, rankings, weekly)
+    if "CEEDEE LAMB" not in str(r4b.get("answer", "")).upper():
+        raise AssertionError(f"TEST 4B expected CeeDee Lamb from current ESPN ADP, got {r4b.get('answer')}")
+    why4b = str(r4b.get("takeaway") or r4b.get("note") or r4b.get("why") or "")
+    if "ADP" not in why4b or "CeeDee Lamb" not in why4b or "Josh Allen" not in why4b:
+        raise AssertionError(f"TEST 4B expected substantive ADP-based WHY, got {why4b}")
+    print(f"TEST 4B PASS: {r4b['answer']} | {why4b}")
 
     stories = news.fetch_espn_news(limit=4)
     if not stories or not all(s.get("title") and s.get("link") for s in stories):
