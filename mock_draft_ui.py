@@ -116,7 +116,7 @@ def _render_top_status(state: dict[str, Any]) -> None:
     )
 
 
-@st.fragment(run_every=1)
+@st.fragment(run_every="1s")
 def _live_timer_fragment() -> None:
     """Refresh the user clock every second without resetting centralized draft state."""
     state = st.session_state.get(_state_key())
