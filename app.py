@@ -9,12 +9,15 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from shiva_engine import build_history_frame, run_shiva_query
+from shiva_engine import build_history_frame
+from shiva_query_router import run_shiva_query
+from espn_news_service import fetch_espn_news
 
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "shiva_draft_roi.sqlite"
 RANKINGS_PATH = APP_DIR / "current_rankings.csv"
 BIRTH_DATES_PATH = APP_DIR / "player_birth_dates.csv"
+WEEKLY_PATH = APP_DIR / "player_weekly_master_2014_2025.csv.gz"
 SPLASH_PATH = APP_DIR / "shiva_splash_screen.jpeg"
 
 st.set_page_config(
@@ -78,9 +81,16 @@ def load_births() -> pd.DataFrame:
     df["birth_date"] = pd.to_datetime(df["birth_date"], errors="coerce")
     return df.dropna(subset=["name_key", "birth_date"]).drop_duplicates("name_key")
 
+@st.cache_data(show_spinner=False)
+def load_weekly() -> pd.DataFrame:
+    if not WEEKLY_PATH.exists():
+        return pd.DataFrame()
+    return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")
+
 roi = load_roi()
 rankings = load_rankings()
 births = load_births()
+weekly = load_weekly()
 for col in ["season", "round", "overall_pick", "position_draft_rank", "position_finish_total", "fantasy_points_ppr", "ppg", "games_played", "final_draft_roi"]:
     if col in roi.columns:
         roi[col] = pd.to_numeric(roi[col], errors="coerce")
@@ -226,7 +236,7 @@ if page == "Shiva Intelligence":
         submitted = st.form_submit_button("Run Report", use_container_width=True)
     if submitted:
         if prompt.strip():
-            st.session_state["shiva_report_dynamic"] = run_shiva_query(prompt, history, roi, rankings)
+            st.session_state["shiva_report_dynamic"] = run_shiva_query(prompt, history, roi, rankings, weekly)
         else:
             st.warning("Type a report request first.")
     report = st.session_state.get("shiva_report_dynamic")
@@ -303,62 +313,49 @@ else:
         st.markdown(f'<div class="player-card"><div class="pos">R{int(pick["round"])}</div><div><div class="player">{pick["player_name"]} ({pick["position"]})</div><div class="meta">{int(pick["season"])} · {pick["league_name"]} · Pick {int(pick["overall_pick"])} · Final {pick["position_finish_total"]}</div></div><div class="tag">{float(pick["ppg"]):.1f} PPG</div></div>', unsafe_allow_html=True)
 
 # ============================================================
-# LIVE ESPN FANTASY NEWS — DIRECT ESPN SITE API
-# No RSS, no feedparser.
+# LIVE ESPN FANTASY NEWS — SERVER-SIDE SERVICE + LAST-GOOD CACHE
 # ============================================================
-import json
-import urllib.request
 from html import escape
 
 st.markdown("---")
-st.header("📰 Live ESPN Fantasy News Stream")
+st.markdown(
+    """
+    <div style="margin:8px 0 12px 0;">
+      <div style="color:#31f22f;font-size:11px;font-weight:1000;letter-spacing:.1em;text-transform:uppercase;">📰 LIVE ESPN NFL NEWS</div>
+      <div style="color:#fff;font-size:24px;font-weight:1000;line-height:1.05;margin-top:5px;">Fantasy-Relevant Headlines</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-@st.cache_data(ttl=300, show_spinner=False)
-def load_espn_news_api() -> list[dict]:
-    """Fetch current ESPN NFL/fantasy-relevant news from ESPN's public site JSON API."""
-    api_url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=12"
-    try:
-        req = urllib.request.Request(
-            api_url,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json,text/plain,*/*",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=12) as response:
-            news_data = json.loads(response.read().decode("utf-8"))
-        articles = news_data.get("articles", []) or []
-        return articles[:4]
-    except Exception:
-        return []
+@st.cache_data(ttl=600, show_spinner=False)
+def load_espn_news_backend() -> list[dict[str, str]]:
+    return fetch_espn_news(limit=8)
 
-articles = load_espn_news_api()
-news_cols = st.columns(4)
-
+articles = load_espn_news_backend()
 if articles:
-    for idx, article in enumerate(articles[:4]):
-        with news_cols[idx]:
-            title = escape(str(article.get("headline", "Fantasy Football Update")))
-            description = escape(str(article.get("description", "Click below to read the full fantasy breakdown.")))
-
-            links_dict = article.get("links", {}) or {}
-            web_links = links_dict.get("web", {}) if isinstance(links_dict, dict) else {}
-            article_url = web_links.get("href", "https://www.espn.com/fantasy/football/") if isinstance(web_links, dict) else "https://www.espn.com/fantasy/football/"
-            article_url = escape(str(article_url), quote=True)
-
-            short_description = description[:110] + ("..." if len(description) > 110 else "")
-
-            st.markdown(
-                f"""
-                <div style="background-color:#262730;padding:15px;border-radius:8px;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #464855;">
-                    <div>
-                        <h4 style="color:#FF4B4B;margin:0 0 10px 0;font-size:16px;font-weight:800;line-height:1.3;">{title}</h4>
-                        <p style="color:#F0F2F6;font-size:13px;line-height:1.4;font-weight:500;">{short_description}</p>
+    for row_start in range(0, min(len(articles), 8), 2):
+        news_cols = st.columns(2)
+        for col_index, article in enumerate(articles[row_start:row_start + 2]):
+            with news_cols[col_index]:
+                title = escape(str(article.get("title") or "ESPN NFL Update"))
+                description = escape(str(article.get("description") or ""))
+                published = escape(str(article.get("published") or ""))
+                article_url = escape(str(article.get("link") or "https://www.espn.com/nfl/"), quote=True)
+                short_description = description[:150] + ("..." if len(description) > 150 else "")
+                st.markdown(
+                    f"""
+                    <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:14px;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);margin-bottom:10px;">
+                      <div>
+                        <div style="color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px;">ESPN NFL</div>
+                        <div style="color:#fff;font-size:14px;font-weight:950;line-height:1.25;">{title}</div>
+                        <div style="color:#a7a8ad;font-size:10px;margin-top:7px;">{published}</div>
+                        <div style="color:#d4d4d7;font-size:11px;line-height:1.4;margin-top:9px;">{short_description}</div>
+                      </div>
+                      <a href="{article_url}" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:14px;padding:11px 8px;border-radius:10px;background:#31f22f;color:#071007!important;text-decoration:none;text-align:center;font-size:10px;font-weight:1000;letter-spacing:.04em;">OPEN ON ESPN</a>
                     </div>
-                    <a href="{article_url}" target="_blank" rel="noopener noreferrer" style="background-color:#FF4B4B;color:white!important;text-align:center;padding:8px 12px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:12px;margin-top:10px;display:block;">READ FULL ARTICLE</a>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    """,
+                    unsafe_allow_html=True,
+                )
 else:
-    st.info("Unable to refresh live news feed articles from ESPN.")
+    st.info("ESPN news could not be refreshed and no last-good cached headlines are available yet. The backend logs contain the request/parsing failure details.")

@@ -138,7 +138,7 @@ def _column(frame: pd.DataFrame, *candidates: str) -> str | None:
 def _weekly_player_season(weekly: pd.DataFrame | None, player: str, season: int | None) -> pd.DataFrame:
     if weekly is None or weekly.empty:
         return pd.DataFrame()
-    name_col = _column(weekly, "player_name", "player_display_name", "name", "player")
+    name_col = _column(weekly, "player_display_name", "player_name", "name", "player")
     season_col = _column(weekly, "season", "year")
     if not name_col:
         return pd.DataFrame()
