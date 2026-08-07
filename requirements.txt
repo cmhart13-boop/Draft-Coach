@@ -1,2 +1,4 @@
-# Runtime dependencies
+streamlit
+pandas
+numpy
 openai>=1.0.0
