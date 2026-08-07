@@ -25,8 +25,12 @@ text = text.replace(
     'run_shiva_query(prompt, history, roi, rankings, weekly)',
 )
 
-marker = "# ============================================================\n# LIVE ESPN FANTASY NEWS — DIRECT ESPN SITE API\n"
-if marker in text:
+markers = [
+    "# ============================================================\n# LIVE ESPN FANTASY NEWS — DIRECT ESPN SITE API\n",
+    "# ============================================================\n# LIVE ESPN FANTASY NEWS — SERVER-SIDE SERVICE + LAST-GOOD CACHE\n",
+]
+marker = next((m for m in markers if m in text), None)
+if marker:
     prefix = text.split(marker, 1)[0].rstrip() + "\n\n"
     news = r'''# ============================================================
 # LIVE ESPN FANTASY NEWS — SERVER-SIDE SERVICE + LAST-GOOD CACHE
@@ -58,11 +62,21 @@ if articles:
                 description = escape(str(article.get("description") or ""))
                 published = escape(str(article.get("published") or ""))
                 article_url = escape(str(article.get("link") or "https://www.espn.com/nfl/"), quote=True)
-                short_description = description[:150] + ("..." if len(description) > 150 else "")
+                thumbnail = escape(str(article.get("thumbnail") or ""), quote=True)
+                short_description = description[:135] + ("..." if len(description) > 135 else "")
+                image_html = (
+                    f'<div style="width:100%;height:112px;overflow:hidden;border-radius:12px;margin-bottom:11px;background:#101114;">'
+                    f'<img src="{thumbnail}" alt="" loading="lazy" referrerpolicy="no-referrer" '
+                    f'style="width:100%;height:100%;object-fit:cover;display:block;" />'
+                    f'</div>'
+                    if thumbnail else
+                    '<div style="height:54px;border-radius:12px;margin-bottom:11px;background:linear-gradient(135deg,#202f42,#141922);display:flex;align-items:center;justify-content:center;color:#31f22f;font-size:22px;font-weight:1000;">ESPN</div>'
+                )
                 st.markdown(
                     f"""
-                    <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:14px;min-height:220px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);margin-bottom:10px;">
+                    <div style="background:linear-gradient(145deg,#202126,#151518);border:1px solid #34343a;border-radius:16px;padding:12px;min-height:290px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 8px 24px rgba(0,0,0,.22);margin-bottom:10px;overflow:hidden;">
                       <div>
+                        {image_html}
                         <div style="color:#31f22f;font-size:9px;font-weight:1000;letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px;">ESPN NFL</div>
                         <div style="color:#fff;font-size:14px;font-weight:950;line-height:1.25;">{title}</div>
                         <div style="color:#a7a8ad;font-size:10px;margin-top:7px;">{published}</div>
@@ -86,4 +100,4 @@ router = router.replace(
     'name_col = _column(weekly, "player_display_name", "player_name", "name", "player")',
 )
 ROUTER.write_text(router, encoding="utf-8")
-print("Patched app.py plus detailed weekly player-name resolution")
+print("Patched app.py with ESPN thumbnail cards and detailed weekly player-name resolution")
