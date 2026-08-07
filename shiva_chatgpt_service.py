@@ -20,14 +20,19 @@ NON-NEGOTIABLE DATA RULES:
 - VERIFIED EVIDENCE supplied by the app is the source of truth for factual statistics.
 - Never invent a statistic, ADP, finish, age, injury fact, historical result, or current-season claim.
 - Never substitute league-wide averages for a named-player question.
-- If evidence is incomplete, say what is missing, then still give the best football analysis that can be supported by the evidence that IS present.
+- If evidence is incomplete, say what is missing, then still give the best football analysis supported by the evidence that IS present.
 - ESPN Full PPR means one point per reception.
 - Recommendation questions require a clear choice when the supplied evidence supports one.
 - If evidence references the wrong player or season, do not use it.
 
+OUTPUT FORMAT — FOLLOW EXACTLY:
+FINAL ANSWER: <one clear, concise answer to the user's question>
+WHY:
+<2-4 concise paragraphs or bullets explaining the reasoning, context, and strongest verified evidence>
+
 STYLE:
-- Direct answer first.
-- Then 2-4 strongest reasons.
+- Make FINAL ANSWER decisive and short enough to be the visual headline.
+- Put all explanation and context under WHY.
 - Mobile-friendly.
 - No implementation jargon.
 - Do not mention Pandas, routing, prompts, or internal systems.
@@ -77,10 +82,42 @@ def _local_fallback(report: dict[str, Any], reason: str = "") -> dict[str, Any]:
     result.setdefault("table", pd.DataFrame())
     result.setdefault("kind", "local_verified")
     result.setdefault("structured_query", {})
-    if reason:
-        existing = str(result.get("note") or "").strip()
-        result["note"] = existing if existing else "Answer calculated from Shiva's verified local data."
+    why = str(result.get("takeaway") or result.get("note") or "").strip()
+    if not why and reason:
+        why = "Answer calculated from Shiva's verified local data."
+    result["why"] = why
     return result
+
+
+def _split_model_response(text: str) -> tuple[str, str]:
+    """Split ChatGPT's required FINAL ANSWER / WHY format into two UI-ready fields."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return "", ""
+
+    upper = cleaned.upper()
+    answer_marker = "FINAL ANSWER:"
+    why_marker = "WHY:"
+
+    if answer_marker in upper:
+        start = upper.index(answer_marker) + len(answer_marker)
+        remainder = cleaned[start:].strip()
+        remainder_upper = remainder.upper()
+        if why_marker in remainder_upper:
+            split_at = remainder_upper.index(why_marker)
+            answer = remainder[:split_at].strip()
+            why = remainder[split_at + len(why_marker):].strip()
+            return answer, why
+        return remainder, ""
+
+    if why_marker in upper:
+        split_at = upper.index(why_marker)
+        return cleaned[:split_at].strip(), cleaned[split_at + len(why_marker):].strip()
+
+    parts = [part.strip() for part in cleaned.split("\n\n") if part.strip()]
+    if len(parts) >= 2:
+        return parts[0], "\n\n".join(parts[1:])
+    return cleaned, ""
 
 
 def ask_shiva_via_chatgpt(
@@ -95,7 +132,6 @@ def ask_shiva_via_chatgpt(
     evidence, local_report = build_verified_evidence(question, history, roi, rankings, weekly)
     key = _configured_api_key(api_key)
 
-    # Never break Ask Shiva because a deployment secret is missing.
     if not key:
         return _local_fallback(local_report, "missing_api_key")
 
@@ -110,24 +146,28 @@ def ask_shiva_via_chatgpt(
                 + question
                 + "\n\nVERIFIED EVIDENCE FROM SHIVA:\n"
                 + json.dumps(evidence, ensure_ascii=False, default=str)
-                + "\n\nGive the direct fantasy-football answer first. Use factual numbers only when supported by the evidence."
+                + "\n\nReturn exactly two sections: FINAL ANSWER and WHY. Use factual numbers only when supported by the evidence."
             ),
         )
         text = (response.output_text or "").strip()
         if not text:
             return _local_fallback(local_report, "empty_model_response")
 
+        answer, why = _split_model_response(text)
+        if not answer:
+            return _local_fallback(local_report, "empty_model_answer")
+
         return {
             "title": "🧠 ASK SHIVA",
-            "answer": text,
-            "note": "ChatGPT analysis grounded in Shiva's verified data.",
+            "answer": answer,
+            "why": why or "This recommendation is based on the verified Shiva evidence retrieved for your question.",
+            "note": "",
             "takeaway": "",
             "table": report_table_from_evidence(evidence),
             "kind": "chatgpt",
             "structured_query": evidence.get("structured_query", {}),
         }
     except Exception:
-        # Production UI must remain useful even if OpenAI is temporarily unavailable.
         return _local_fallback(local_report, "openai_error")
 
 
