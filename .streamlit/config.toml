@@ -1,8 +1,16 @@
-[ui]
-hideTopBar = true
-
-[client]
-toolbarMode = "minimal"
-
 [theme]
 base = "dark"
+primaryColor = "#E31837"
+backgroundColor = "#0B0D10"
+secondaryBackgroundColor = "#12161B"
+textColor = "#F7F8FA"
+font = "sans serif"
+
+[runner]
+magicEnabled = false
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
