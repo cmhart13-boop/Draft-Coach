@@ -34,15 +34,11 @@ def _ppr_points(frame: pd.DataFrame) -> pd.Series:
     """Return ESPN full-PPR fantasy points without inventing missing data."""
     if frame is None or frame.empty:
         return pd.Series(dtype=float)
-
-    # The weekly master already contains verified PPR points. Prefer that field
-    # so the consistency metric exactly follows the stored game-level dataset.
     if "fantasy_points_ppr" in frame.columns:
         stored = pd.to_numeric(frame["fantasy_points_ppr"], errors="coerce")
         if stored.notna().any():
             return stored
 
-    # Fallback only when the stored PPR field is unavailable, using ESPN PPR.
     scoring = {
         "passing_yards": 0.04,
         "passing_tds": 4.0,
@@ -136,8 +132,6 @@ def season_consistency(
                 "ppr_threshold_games": hits,
                 "ppr_threshold_rate": rate,
                 "consistency_qualified": bool(games >= int(min_games) and rate >= float(rate_threshold)),
-                # This is the consistency component of Shiva scoring, not a fabricated
-                # all-purpose projection. 100 = hit the threshold in every game played.
                 "shiva_consistency_score": round(rate * 100.0, 1),
             }
         )
@@ -153,6 +147,7 @@ def enrich_rankings_with_consistency(
     min_games: int = DEFAULT_MIN_GAMES,
     rate_threshold: float = DEFAULT_RATE_THRESHOLD,
 ) -> pd.DataFrame:
+    """Attach consistency columns safely, even if Streamlit reruns enrichment."""
     if rankings is None:
         return pd.DataFrame()
     out = rankings.copy()
@@ -169,13 +164,25 @@ def enrich_rankings_with_consistency(
     if metrics.empty:
         return out
 
+    metric_cols = [
+        "consistency_season", "games_played", "ppr_threshold", "ppr_threshold_games",
+        "ppr_threshold_rate", "consistency_qualified", "shiva_consistency_score",
+    ]
+    # Streamlit reruns app.py. The app may therefore call this function on a
+    # dataframe that was already enriched during an earlier wrapper call. Drop
+    # those derived fields before merging so pandas never creates _x/_y suffix
+    # collisions or raises MergeError.
+    out.drop(columns=[c for c in metric_cols if c in out.columns], inplace=True, errors="ignore")
+    out.drop(columns=["_name_key"], inplace=True, errors="ignore")
     out["_name_key"] = out["player_name"].map(_name_key)
+
     cols = [
         "_name_key", "season", "games_played", "ppr_threshold", "ppr_threshold_games",
         "ppr_threshold_rate", "consistency_qualified", "shiva_consistency_score",
     ]
     metrics = metrics[cols].rename(columns={"season": "consistency_season"})
-    out = out.merge(metrics, on="_name_key", how="left")
+    metrics = metrics.drop_duplicates(subset=["_name_key"], keep="last")
+    out = out.merge(metrics, on="_name_key", how="left", validate="m:1")
     out.drop(columns=["_name_key"], inplace=True, errors="ignore")
     return out
 
