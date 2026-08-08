@@ -1,5 +1,6 @@
 import base64
 import time
+from io import BytesIO
 from pathlib import Path
 
 import streamlit as st
@@ -15,43 +16,28 @@ from shiva_app_v2 import run
 from streamlit_branding_fix import hide_streamlit_branding
 
 
-def _ensure_splash_asset() -> Path:
-    asset_dir = Path("assets")
-    asset_dir.mkdir(exist_ok=True)
-    splash_path = asset_dir / "1_shiva_intelligence_splash.webp"
-    if not splash_path.exists():
-        parts = []
-        chunks_dir = Path("splash_chunks")
-        for chunk in sorted(chunks_dir.glob("*.txt")):
-            parts.append(chunk.read_text().strip())
-        splash_path.write_bytes(base64.b64decode("".join(parts)))
-    return splash_path
+def _load_splash_bytes() -> bytes:
+    splash_path = Path("assets/1_shiva_intelligence_splash.webp")
+    if splash_path.exists():
+        return splash_path.read_bytes()
+    chunks_dir = Path("splash_chunks")
+    encoded = "".join(p.read_text().strip() for p in sorted(chunks_dir.glob("*.txt")))
+    return base64.b64decode(encoded)
 
 
 hide_streamlit_branding()
 
 if not st.session_state.get("_shiva_splash_seen", False):
-    splash = _ensure_splash_asset()
     st.markdown(
         """
         <style>
-        [data-testid="stAppViewContainer"] > .main .block-container {
-            padding: 0 !important;
-            max-width: 100% !important;
-        }
-        .stImage img {
-            position: fixed !important;
-            inset: 0 !important;
-            width: 100vw !important;
-            height: 100dvh !important;
-            object-fit: cover !important;
-            z-index: 999999 !important;
-        }
+        [data-testid="stAppViewContainer"] > .main .block-container {padding:0!important;max-width:100%!important;}
+        .stImage img {position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;object-fit:cover!important;z-index:999999!important;}
         </style>
         """,
         unsafe_allow_html=True,
     )
-    st.image(str(splash), use_container_width=True)
+    st.image(BytesIO(_load_splash_bytes()), use_container_width=True)
     time.sleep(2.5)
     st.session_state["_shiva_splash_seen"] = True
     st.session_state["page"] = "Home"
