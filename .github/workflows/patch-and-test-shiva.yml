@@ -70,7 +70,7 @@ jobs:
           assert 'grid-template-columns:repeat({teams},minmax(0,1fr))' in base
           assert 'MY TEAM IQ' in shell and '_team_iq(roi, weekly)' in shell
           assert 'canonical_player_id' in shell and 'linkify_player_names' in shell
-          assert 'player_id' in profile and 'profile-years' in profile and 'profile-log' in profile
+          assert 'player_id' in profile and '.pp-yearselect' in profile and '.pp-log' in profile and '_weekly_table' in profile
 
           players = [
               {'id':'p1','name':'Test RB','position':'RB','team':'ATL','adp':1.0,'rank':1,'bye':5,'projected_points':250.0,'isAvailable':True},
@@ -112,7 +112,6 @@ jobs:
           assert len(pool) >= 100, len(pool)
           assert len({p['id'] for p in pool}) == len(pool)
           assert all(p['position'] in {'QB','RB','WR','TE','D/ST','K'} for p in pool)
-          # Projections are optional. The UI must show a dash when verified projections are absent.
           if 'projected_points' not in rankings.columns:
               assert all(p['projected_points'] is None for p in pool)
               print('Current rankings validated; verified projection field is not present, so UI fallback is required')
