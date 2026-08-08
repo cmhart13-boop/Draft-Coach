@@ -1,0 +1,37 @@
+name: Test Cold Start
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - assets/**
+      - shiva_app_v3.py
+      - .github/workflows/test-cold-start.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cold-start:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Launch from a fresh session
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.run(timeout=90)
+          assert not at.exception, [str(x) for x in at.exception]
+          # A fresh run may rerun once through the splash guard. It must end on Home.
+          assert at.session_state.get('_shiva_splash_seen') is True
+          assert at.session_state.get('page') == 'Home'
+          print('Cold start PASS: missing/invalid splash cannot crash the app')
+          PY
