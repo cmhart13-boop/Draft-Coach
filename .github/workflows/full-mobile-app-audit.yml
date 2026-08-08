@@ -1,0 +1,257 @@
+name: Full Mobile App Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - shiva_app_v3.py
+      - shiva_app_v2.py
+      - mock_draft_engine.py
+      - mock_draft_ui_v2.py
+      - mock_draft_players_espn.py
+      - mobile_bottom_nav_fix.py
+      - streamlit_branding_fix.py
+      - player_profile.py
+      - espn_news_service.py
+      - shiva_chatgpt_service.py
+      - shiva_query_router.py
+      - draft_decision_engine.py
+      - shiva_engine.py
+      - current_rankings.csv
+      - player_birth_dates.csv
+      - player_weekly_master_2014_2025.csv.gz
+      - shiva_draft_roi.sqlite
+      - espn_news_cache.json
+      - assets/**
+      - .streamlit/config.toml
+      - .github/workflows/full-mobile-app-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  complete-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile every production module
+        run: |
+          python -m py_compile \
+            app.py shiva_app_v3.py shiva_app_v2.py \
+            mock_draft_engine.py mock_draft_ui_v2.py mock_draft_players_espn.py \
+            mobile_bottom_nav_fix.py streamlit_branding_fix.py player_profile.py \
+            espn_news_service.py shiva_chatgpt_service.py shiva_query_router.py \
+            draft_decision_engine.py shiva_engine.py
+
+      - name: Audit repository data and assets
+        run: |
+          python - <<'PY'
+          import json
+          import sqlite3
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          import pandas as pd
+          from PIL import Image
+          from mock_draft_engine import build_player_pool
+
+          root = Path('.')
+
+          # Splash is optional at runtime, but if committed it must actually be a valid image.
+          splash = root / 'assets' / 'shiva_splash.jpg'
+          if splash.exists() and splash.stat().st_size > 0:
+              try:
+                  with Image.open(splash) as img:
+                      img.verify()
+                  print('Splash image valid:', splash.stat().st_size, 'bytes')
+              except Exception as exc:
+                  raise AssertionError(f'Committed splash asset is unreadable: {exc}')
+          else:
+              print('Splash omitted/empty; runtime gracefully skips it')
+
+          rankings = pd.read_csv(root / 'current_rankings.csv')
+          required = {'player_name','team','bye','position','adp','overall_rank'}
+          assert required.issubset(rankings.columns), required - set(rankings.columns)
+          assert len(rankings) >= 100, len(rankings)
+          assert rankings['player_name'].dropna().astype(str).str.strip().ne('').all()
+          pool = build_player_pool(rankings)
+          assert len(pool) >= 100, len(pool)
+          assert len({p['id'] for p in pool}) == len(pool)
+          assert all(p['position'] in {'QB','RB','WR','TE','D/ST','K'} for p in pool)
+          if 'projected_points' not in rankings.columns:
+              assert all(p['projected_points'] is None for p in pool)
+              print('NOTE: current rankings contain no verified projections; production must display — rather than fabricate PROJ values')
+
+          with sqlite3.connect(root / 'shiva_draft_roi.sqlite') as con:
+              tables = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table'", con)['name'].tolist()
+              assert 'draft_roi_scores' in tables, tables
+              count = con.execute('SELECT COUNT(*) FROM draft_roi_scores').fetchone()[0]
+              assert count > 0, count
+              print('League history rows:', count)
+
+          cache_path = root / 'espn_news_cache.json'
+          assert cache_path.exists()
+          cache = json.loads(cache_path.read_text(encoding='utf-8'))
+          stories = cache.get('stories') or []
+          assert stories, 'ESPN fallback cache is empty'
+          for story in stories:
+              link = str(story.get('link') or '')
+              parsed = urlparse(link)
+              assert parsed.scheme == 'https' and parsed.netloc.endswith('espn.com'), link
+              assert str(story.get('title') or '').strip(), story
+          updated = datetime.fromisoformat(str(cache['updated_at']).replace('Z', '+00:00'))
+          age_days = (datetime.now(timezone.utc) - updated.astimezone(timezone.utc)).total_seconds() / 86400
+          assert age_days <= 7, f'ESPN fallback cache is stale: {age_days:.1f} days'
+          print('ESPN fallback cache valid:', len(stories), 'stories, age', round(age_days, 2), 'days')
+          PY
+
+      - name: Audit mobile-first presentation contracts
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          app = Path('app.py').read_text()
+          shell = Path('shiva_app_v3.py').read_text()
+          nav = Path('mobile_bottom_nav_fix.py').read_text()
+          branding = Path('streamlit_branding_fix.py').read_text()
+          mock = Path('mock_draft_players_espn.py').read_text()
+          base_mock = Path('mock_draft_ui_v2.py').read_text()
+          profile = Path('player_profile.py').read_text()
+          config = Path('.streamlit/config.toml').read_text()
+
+          # Production wiring.
+          assert 'render_espn_players_available' in app
+          assert 'apply_mobile_bottom_nav_fix()' in app
+          assert 'valid_local_image' in app and 'Image.open' in app
+
+          # Five-wide, fixed, thumb-friendly mobile navigation.
+          assert 'grid-template-columns: repeat(5, minmax(0, 1fr))' in nav
+          assert 'position: fixed' in nav and 'bottom: 0' in nav
+          assert 'safe-area-inset-bottom' in nav
+          heights = [int(x) for x in re.findall(r'(?:min-)?height:\s*(\d+)px', nav)]
+          assert heights and max(heights) >= 44, heights
+          assert 'overflow: hidden' in nav
+          assert 'padding-bottom: 112px' in nav
+
+          # No Streamlit chrome overlapping the mobile app.
+          assert 'stAppDeployButton' in branding and 'viewerBadge' in branding
+          assert 'hideTopBar = true' in config and 'toolbarMode = "minimal"' in config
+
+          # Functional stateful nav remains real Streamlit buttons, not dead HTML links.
+          assert 'st.container(key="app_bottom_nav")' in shell
+          assert 'st.button(label' in shell and '_go(target)' in shell and 'st.rerun()' in shell
+
+          # Home feature buttons all map to real pages.
+          for key in ['home_draft','home_team','home_cheats','home_players','home_sleepers','home_shiva']:
+              assert key in shell, key
+
+          # ESPN-style Players Available view: flat 6-column mobile table, queue, profiles, filters.
+          assert 'grid-template-columns:9% 39% 9% 13% 15% 15%' in mock
+          assert 'player-table-header' in mock
+          assert 'player-row-even' in mock and 'player-row-odd' in mock
+          assert 'queue_btn_' in mock and 'base.queue_add(state, pid)' in mock
+          assert 'base.player_link_html' in mock
+          assert 'mock2_search' in mock and 'mock2_pos' in mock and 'mock2_sort' in mock
+          assert 'overflow-x:auto' not in mock
+
+          # Base mock features cannot disappear while skinning Players Available.
+          for marker in ['PLAYERS_AVAILABLE','QUEUE','DRAFT_BOARD','ROSTER','timer_remaining','roster_slots','undo_last_pick']:
+              assert marker in base_mock, marker
+
+          # Player profiles retain historical year/log structures.
+          for marker in ['profile-years','profile-log','canonical_player_id','fantasy_points_ppr']:
+              assert marker in profile, marker
+
+          print('Mobile-first presentation contracts passed')
+          PY
+
+      - name: Audit mock draft engine state transitions
+        run: |
+          python - <<'PY'
+          import time
+          from mock_draft_engine import (
+              initialize_draft, start_draft, advance_cpu_until_user, queue_add, queue_remove,
+              make_pick, undo_last_pick, roster_slots, timer_remaining, snake_team_for_pick,
+          )
+
+          positions = ['RB','WR','TE','QB','D/ST','K']
+          players = [
+              {'id':f'p{i}','name':f'Player {i}','position':positions[(i-1)%len(positions)],
+               'team':'ATL','bye':5,'adp':float(i),'rank':i,'projected_points':None,'isAvailable':True}
+              for i in range(1, 181)
+          ]
+          state = initialize_draft(players, teams_count=10, draft_position=4, scoring='PPR', rounds=16, seconds_per_pick=90)
+          start_draft(state)
+          advance_cpu_until_user(state)
+          assert state['currentTeam'] == 't4' and len(state['picks']) == 3
+
+          pid = state['availablePlayers'][0]['id']
+          queue_add(state, pid); assert pid in state['queue']
+          queue_remove(state, pid); assert pid not in state['queue']
+          queue_add(state, pid)
+          make_pick(state, pid, source='user')
+          assert pid not in state['queue']
+          assert all(p['id'] != pid for p in state['availablePlayers'])
+          assert any(p['id'] == pid for p in next(t for t in state['teams'] if t['id'] == 't4')['roster'])
+          assert any(p and p['id'] == pid for _, p in roster_slots(state, 't4'))
+          undo_last_pick(state)
+          assert any(p['id'] == pid for p in state['availablePlayers'])
+          assert snake_team_for_pick(11, 10) == 10 and snake_team_for_pick(20, 10) == 1
+          state['timer'] = {'remaining': 1, 'startedAt': time.time() - 2}
+          assert timer_remaining(state) == 0
+          print('Mock draft engine transitions passed')
+          PY
+
+      - name: Run deterministic Shiva intelligence regression tests
+        run: python scripts/regression_checks.py
+
+      - name: Render and navigate every production page
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          pages = ['Home','Players','League History','Draft Coach','Sleepers','Cheat Sheets','Shiva Intelligence','Mock Draft']
+          for page in pages:
+              at = AppTest.from_file('app.py', default_timeout=90)
+              at.session_state['_shiva_splash_seen'] = True
+              at.session_state['page'] = page
+              at.run(timeout=90)
+              assert not at.exception, (page, [str(x) for x in at.exception])
+              assert at.session_state['page'] == page
+              print('render PASS:', page)
+
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.session_state['_shiva_splash_seen'] = True
+          at.session_state['page'] = 'Home'
+          at.run(timeout=90)
+          route = [
+              ('bottom_Players','Players'),
+              ('bottom_League_History','League History'),
+              ('bottom_Draft_Coach','Draft Coach'),
+              ('bottom_Home','Home'),
+              ('bottom_Mock_Draft','Mock Draft'),
+              ('bottom_Home','Home'),
+              ('bottom_League_History','League History'),
+              ('bottom_Players','Players'),
+              ('bottom_Home','Home'),
+          ]
+          for key, expected in route:
+              at.button(key=key).click().run(timeout=90)
+              assert not at.exception, (key, [str(x) for x in at.exception])
+              assert at.session_state['page'] == expected
+              print('navigation PASS:', key, '->', expected)
+          PY
