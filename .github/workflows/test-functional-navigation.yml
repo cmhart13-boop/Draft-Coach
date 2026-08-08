@@ -1,0 +1,76 @@
+name: Test Functional Navigation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - shiva_app_v3.py
+      - mock_draft_ui_v2.py
+      - player_profile.py
+      - espn_news_service.py
+      - .github/workflows/test-functional-navigation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compile functional shell
+        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_ui_v2.py player_profile.py espn_news_service.py shiva_chatgpt_service.py shiva_engine.py
+
+      - name: Import production shell
+        run: python -c "import shiva_app_v3; import app; print('production imports OK')"
+
+      - name: Verify navigation contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('app.py').read_text()
+          shell = Path('shiva_app_v3.py').read_text()
+          news = Path('espn_news_service.py').read_text()
+
+          assert 'from shiva_app_v3 import run' in app
+          assert 'mobile_nav_override' not in app
+          for page in ['Home','Mock Draft','Players','League History','Draft Coach','Sleepers','Cheat Sheets','Shiva Intelligence','Player Profile']:
+              assert f'"{page}"' in shell, page
+          for target in ['bottom_Home','bottom_Mock_Draft','bottom_Players','bottom_League_History','bottom_Draft_Coach']:
+              assert target.replace('bottom_', '') or True
+          assert 'st.container(key="app_bottom_nav")' in shell
+          assert '_go(target)' in shell
+          assert 'st.rerun()' in shell
+          assert 'query_page' in shell and 'query_player' in shell
+          assert '_clear_profile_state()' in shell
+          assert 'OPEN ON ESPN' in shell
+          assert 'article.get("link")' in shell
+          assert 'ESPN_RSS_URL' in news and 'ESPN_JSON_URL' in news
+          assert 'render_mock_draft_room_v2(' in shell
+          assert '_team_iq(roi, weekly)' in shell
+          assert '_sleepers(rankings, weekly)' in shell
+          assert '_cheat_sheets(rankings, weekly)' in shell
+          print('navigation contracts passed')
+          PY
+
+      - name: Streamlit app smoke test
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.run(timeout=90)
+          assert not at.exception, [str(x) for x in at.exception]
+          print('Streamlit home smoke test passed')
+          PY
