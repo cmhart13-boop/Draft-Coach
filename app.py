@@ -11,8 +11,14 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from shiva_app_v3 import run
+import shiva_app_v3
+from mock_draft_players_espn import render_mock_draft_room_v2 as render_espn_players_available
 from streamlit_branding_fix import hide_streamlit_branding
+
+# Keep the existing app shell and mock-draft engine. Only replace the
+# Players Available presentation layer used by the Draft Coach mock room.
+shiva_app_v3.render_mock_draft_room_v2 = render_espn_players_available
+run = shiva_app_v3.run
 
 hide_streamlit_branding()
 
