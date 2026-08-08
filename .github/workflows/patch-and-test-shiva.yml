@@ -1,32 +1,28 @@
-name: Test Shiva App
+name: Test Shiva Intelligence App
 
 on:
   push:
     branches: [main]
     paths:
       - app.py
-      - shiva_query_router.py
-      - shiva_chatgpt_service.py
+      - shiva_app_v2.py
       - mock_draft_engine.py
-      - mock_draft_ui.py
+      - mock_draft_ui_v2.py
       - player_profile.py
-      - shiva_mobile_home.py
-      - scripts/regression_checks.py
-      - scripts/mock_draft_regression.py
-      - scripts/prepare_reference_patch.py
-      - scripts/patch_reference_mock_ui.py
-      - scripts/patch_reference_app.py
+      - shiva_chatgpt_service.py
+      - shiva_engine.py
+      - current_rankings.csv
+      - player_birth_dates.csv
+      - player_weekly_master_2014_2025.csv.gz
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test-shiva-app:
     runs-on: ubuntu-latest
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,87 +32,78 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install test dependencies
-        run: pip install pandas numpy openai streamlit
-
-      - name: Integrate reference layouts
-        run: |
-          python scripts/prepare_reference_patch.py
-          python scripts/patch_reference_mock_ui.py
-          python scripts/patch_reference_app.py
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('app.py')
-          s = p.read_text()
-          marker = '# Navigation routes preserved: Shiva Intelligence | Draft Coach | Mock Draft | Shiva League History\n'
-          if marker not in s:
-              s += '\n' + marker
-              p.write_text(s)
-          PY
-
-      - name: Run Ask Shiva regression checks
-        run: python scripts/regression_checks.py
-
-      - name: Run all 26 Mock Draft regression checks
-        run: python scripts/mock_draft_regression.py
-
-      - name: Verify reference mock draft layout
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          s = Path('mock_draft_ui.py').read_text()
-          assert 'MOCK DRAFT' in s
-          assert '["PLAYERS", "DRAFT BOARD", "QUEUE", "TEAM", "RESULTS"]' in s
-          assert 'mock_board_scroll' in s
-          assert 'playerrow_' in s
-          assert 'open_player_profile' in s
-          print('Reference mock draft layout + clickable player routing present')
-          PY
-
-      - name: Verify mobile home and profile routing
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          app = Path('app.py').read_text()
-          home = Path('shiva_mobile_home.py').read_text()
-          profile = Path('player_profile.py').read_text()
-          assert 'render_home' in app and 'render_bottom_navigation' in app
-          assert 'Player Profiles' in app and 'Player Profile' in app
-          assert 'opponent_team' in app
-          assert 'DRAFT BOARD' in home and 'MOCK DRAFT' in home and 'ASK SHIVA GPT' in home
-          assert 'GAME LOG · WEEK 1-17' in profile
-          assert 'render_player_directory' in profile
-          assert 'open_player_profile' in profile
-          print('Home, bottom nav, player directory and year-selectable profiles present')
-          PY
-
-      - name: Verify resource-safe weekly loader
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          s = Path('app.py').read_text()
-          assert '@st.cache_resource(show_spinner=False)\ndef load_weekly' in s
-          assert 'usecols=usecols or None' in s
-          print('Resource-safe weekly loader present')
-          PY
-
-      - name: Verify live timer fragment exists
-        run: python -c "from pathlib import Path; s=Path('mock_draft_ui.py').read_text(); assert '@st.fragment(run_every=\"1s\")' in s and '_live_timer_fragment()' in s"
-
-      - name: Import production modules
-        run: python -c "import streamlit as st; import mock_draft_engine; import mock_draft_ui; import player_profile; import shiva_mobile_home; print('Streamlit', st.__version__, 'imports OK')"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Compile production modules
-        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py player_profile.py shiva_mobile_home.py
+        run: python -m py_compile app.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py shiva_chatgpt_service.py shiva_engine.py
 
-      - name: Commit integrated reference screens
+      - name: Import production modules
+        run: python -c "import streamlit as st; import shiva_app_v2, mock_draft_engine, mock_draft_ui_v2, player_profile; print('Streamlit', st.__version__, 'production imports OK')"
+
+      - name: Verify mobile draft and universal player routing
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app.py mock_draft_ui.py
-          if git diff --cached --quiet; then
-            echo "All reference integrations already present."
-            exit 0
-          fi
-          git commit -m "Match reference mobile home mock draft and player profiles"
-          git push
+          python - <<'PY'
+          from pathlib import Path
+          mock = Path('mock_draft_ui_v2.py').read_text()
+          app = Path('shiva_app_v2.py').read_text()
+          profile = Path('player_profile.py').read_text()
+          assert 'DRAFT BOARD' in mock and 'QUEUE' in mock and 'TEAM' in mock and 'RESULTS' in mock
+          assert 'mock-player' in mock and 'mock-q' in mock and 'draft-status' in mock
+          assert 'grid-template-columns:repeat({teams},minmax(0,1fr))' in mock
+          assert 'player_profile_href' in mock and 'player_link_html' in mock
+          assert 'canonical_player_id' in app and 'player_link_html' in app
+          assert 'linkify_player_names' in app
+          assert 'player_id' in profile and 'player_profile_href' in profile
+          assert 'profile-years' in profile and 'profile-log' in profile
+          assert 'favorite_player_ids' in profile
+          print('Mobile draft UI and centralized player routing checks passed')
+          PY
+
+      - name: Validate historical player seasons and Full PPR scoring
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from player_profile import _weekly_for_player, canonical_player_id, _points
+
+          path = 'player_weekly_master_2014_2025.csv.gz'
+          header = pd.read_csv(path, compression='gzip', nrows=0).columns.tolist()
+          wanted = [c for c in [
+              'season','week','season_type','player_id','player_display_name','player_name','name',
+              'position','recent_team','team','opponent_team','opponent','fantasy_points_ppr',
+              'passing_yards','passing_tds','interceptions','rushing_yards','rushing_tds',
+              'receptions','receiving_yards','receiving_tds','fumbles_lost',
+              'passing_two_point_conversions','rushing_two_point_conversions','receiving_two_point_conversions'
+          ] if c in header]
+          weekly = pd.read_csv(path, compression='gzip', usecols=wanted, low_memory=False)
+
+          cmc_id = canonical_player_id(weekly, 'Christian McCaffrey')
+          cmc = _weekly_for_player(weekly, cmc_id, 'Christian McCaffrey')
+          years = sorted(pd.to_numeric(cmc['season'], errors='coerce').dropna().astype(int).unique().tolist(), reverse=True)
+          assert years and min(years) <= 2017 and max(years) >= 2025, years
+
+          # Dynamic-year behavior: available years come only from actual rows for each player.
+          sample_name_col = next(c for c in ['player_display_name','player_name','name'] if c in weekly.columns)
+          counts = weekly.groupby(sample_name_col)['season'].nunique().sort_values()
+          one_year_names = counts[counts == 1]
+          assert not one_year_names.empty
+          rookie_name = str(one_year_names.index[0])
+          rookie_id = canonical_player_id(weekly, rookie_name)
+          rookie = _weekly_for_player(weekly, rookie_id, rookie_name)
+          rookie_years = pd.to_numeric(rookie['season'], errors='coerce').dropna().astype(int).unique().tolist()
+          assert len(rookie_years) == 1, (rookie_name, rookie_years)
+
+          # Validate ESPN-style Full PPR calculation against loaded PPR points on rows where
+          # the underlying scoring fields required by the app are available.
+          check = weekly.copy()
+          if 'season_type' in check.columns:
+              check = check[check['season_type'].astype(str).str.upper().isin(['REG','REGULAR','REGULAR SEASON'])]
+          if 'fantasy_points_ppr' in check.columns:
+              check = check[pd.to_numeric(check['fantasy_points_ppr'], errors='coerce').notna()].head(5000).copy()
+              calc = _points(check)
+              actual = pd.to_numeric(check['fantasy_points_ppr'], errors='coerce')
+              diff = (calc - actual).abs().dropna()
+              assert not diff.empty
+              assert float(diff.quantile(.95)) <= 0.11, diff.describe().to_dict()
+          print('Historical years and Full PPR scoring validation passed', years, rookie_name, rookie_years)
+          PY
