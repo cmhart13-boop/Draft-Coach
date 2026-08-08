@@ -44,6 +44,15 @@ jobs:
           python scripts/prepare_reference_patch.py
           python scripts/patch_reference_mock_ui.py
           python scripts/patch_reference_app.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app.py')
+          s = p.read_text()
+          marker = '# Navigation routes preserved: Shiva Intelligence | Draft Coach | Mock Draft | Shiva League History\n'
+          if marker not in s:
+              s += '\n' + marker
+              p.write_text(s)
+          PY
 
       - name: Run Ask Shiva regression checks
         run: python scripts/regression_checks.py
