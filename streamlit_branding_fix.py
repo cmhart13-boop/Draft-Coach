@@ -3,13 +3,48 @@ from __future__ import annotations
 import streamlit as st
 
 
-def _patch_navigation() -> None:
-    """Make page and mock-draft navigation survive Streamlit reruns.
+def _patch_data_loading() -> None:
+    """Install one clean rankings loader on every Streamlit rerun.
 
-    The mobile layout intentionally uses native Streamlit buttons. Navigation
-    is stored in both session state and a one-shot query param so a rerun cannot
-    drop the destination and fall back to the previous screen.
+    app.py is re-executed by Streamlit, while imported modules stay cached. That
+    means monkey-patched loaders can otherwise wrap previously patched loaders
+    again and again. Always rebuild from the verified base loader instead.
     """
+    try:
+        import shiva_app_v2
+        import shiva_app_v3
+        from consistency_metrics import (
+            DEFAULT_MIN_GAMES,
+            DEFAULT_POINT_THRESHOLD,
+            DEFAULT_PRIOR_SEASON,
+            DEFAULT_RATE_THRESHOLD,
+            enrich_rankings_with_consistency,
+        )
+        from joel_smyth_ppr import enrich_rankings_with_joel_ppr
+    except Exception:
+        return
+
+    def _clean_rankings_loader():
+        rankings = enrich_rankings_with_joel_ppr(shiva_app_v2.load_rankings())
+        weekly = shiva_app_v2.load_weekly()
+        point_threshold = float(st.session_state.get("consistency_point_threshold", DEFAULT_POINT_THRESHOLD))
+        min_games = int(st.session_state.get("consistency_min_games", DEFAULT_MIN_GAMES))
+        rate_threshold = float(st.session_state.get("consistency_rate_threshold", DEFAULT_RATE_THRESHOLD))
+        season = int(st.session_state.get("consistency_season", DEFAULT_PRIOR_SEASON))
+        return enrich_rankings_with_consistency(
+            rankings,
+            weekly,
+            season=season,
+            point_threshold=point_threshold,
+            min_games=min_games,
+            rate_threshold=rate_threshold,
+        )
+
+    shiva_app_v3.load_rankings = _clean_rankings_loader
+
+
+def _patch_navigation() -> None:
+    """Make page and mock-draft navigation survive Streamlit reruns."""
     try:
         import shiva_app_v3
     except Exception:
@@ -18,8 +53,6 @@ def _patch_navigation() -> None:
     if shiva_app_v3 is not None:
         def _go_persistent(page: str) -> None:
             target = page if page in shiva_app_v3.PAGES else "Home"
-            # Clear only player-profile routing state. Never clear mock-draft
-            # state when moving between app sections.
             for key in ("player_profile_name", "player_profile_id", "player_profile_return_page"):
                 st.session_state.pop(key, None)
             for key in ("player", "player_id", "return_page", "return_q", "season", "profile_tab", "favorite"):
@@ -72,12 +105,12 @@ def _patch_navigation() -> None:
 
 
 def hide_streamlit_branding() -> None:
-    """Remove Streamlit chrome and install rerun-safe navigation."""
+    """Remove Streamlit chrome and install rerun-safe app behavior."""
+    _patch_data_loading()
     _patch_navigation()
     st.markdown(
         r"""
         <style>
-        /* Native Streamlit toolbar / status / deploy controls */
         header,
         footer,
         #MainMenu,
@@ -105,9 +138,6 @@ def hide_streamlit_branding() -> None:
             overflow: hidden !important;
         }
 
-        /* Community Cloud viewer / Hosted-with-Streamlit badge.
-           Streamlit has changed these generated class names across releases,
-           so target both known names and stable substring patterns. */
         .viewerBadge_container__1QSob,
         .styles_viewerBadge__1yB5_,
         .viewerBadge_link__1S137,
@@ -127,7 +157,6 @@ def hide_streamlit_branding() -> None:
             pointer-events: none !important;
         }
 
-        /* Prevent any hidden Streamlit chrome from reserving mobile space. */
         [data-testid="stAppViewContainer"] > header,
         [data-testid="stAppViewContainer"] > footer {
             display: none !important;
