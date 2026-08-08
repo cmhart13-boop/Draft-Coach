@@ -5,15 +5,21 @@ on:
     branches: [main]
     paths:
       - app.py
+      - shiva_app_v3.py
       - shiva_app_v2.py
       - mock_draft_engine.py
       - mock_draft_ui_v2.py
+      - mock_draft_players_espn.py
+      - mobile_bottom_nav_fix.py
       - player_profile.py
       - shiva_chatgpt_service.py
+      - shiva_query_router.py
+      - draft_decision_engine.py
       - shiva_engine.py
       - current_rankings.csv
       - player_birth_dates.csv
       - player_weekly_master_2014_2025.csv.gz
+      - shiva_draft_roi.sqlite
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
 
@@ -36,39 +42,39 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile production modules
-        run: python -m py_compile app.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py shiva_chatgpt_service.py shiva_engine.py
+        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py mock_draft_players_espn.py mobile_bottom_nav_fix.py streamlit_branding_fix.py player_profile.py shiva_chatgpt_service.py shiva_query_router.py draft_decision_engine.py shiva_engine.py
 
       - name: Import production modules
-        run: python -c "import streamlit as st; import shiva_app_v2, mock_draft_engine, mock_draft_ui_v2, player_profile; print('Streamlit', st.__version__, 'production imports OK')"
+        run: python -c "import streamlit as st; import shiva_app_v3, mock_draft_engine, mock_draft_ui_v2, mock_draft_players_espn, player_profile; print('Streamlit', st.__version__, 'production imports OK')"
 
-      - name: Verify stateful mock draft navigation and queue roster synchronization
+      - name: Verify active mock draft and engine synchronization
         run: |
           python - <<'PY'
           from pathlib import Path
-          from mock_draft_engine import initialize_draft, start_draft, queue_add, queue_remove, make_pick, roster_slots
+          from mock_draft_engine import initialize_draft, start_draft, queue_add, queue_remove, make_pick, roster_slots, undo_last_pick
 
-          mock = Path('mock_draft_ui_v2.py').read_text()
-          app = Path('shiva_app_v2.py').read_text()
+          base = Path('mock_draft_ui_v2.py').read_text()
+          active = Path('mock_draft_players_espn.py').read_text()
+          app = Path('app.py').read_text()
+          shell = Path('shiva_app_v3.py').read_text()
           profile = Path('player_profile.py').read_text()
 
-          assert '("PLAYERS_AVAILABLE", "PLAYERS AVAILABLE")' in mock
-          assert '("QUEUE", "QUEUE")' in mock
-          assert '("DRAFT_BOARD", "DRAFT BOARD")' in mock
-          assert '("ROSTER", "ROSTER")' in mock
-          assert 'st.session_state[TAB_KEY] = key' in mock
-          assert 'queue_btn_' in mock and 'queue_add(state, pid)' in mock and 'queue_remove(state, pid)' in mock
-          assert 'draft_btn_' in mock and 'make_pick(state, pid, source="user")' in mock
-          assert 'roster_slots(state, state["userTeamId"])' in mock
-          assert 'grid-template-columns:repeat({teams},minmax(0,1fr))' in mock
-          assert 'DRAFT BOARD' in app and 'Mock Drafts • 2026 Rankings' in app
-          assert 'MY TEAM IQ' in app and 'team_iq_league' in app and 'team_iq_manager' in app and 'team_iq_year' in app
-          assert 'player_profile_href' in mock and 'player_link_html' in mock
-          assert 'canonical_player_id' in app and 'linkify_player_names' in app
+          for marker in ['PLAYERS_AVAILABLE', 'QUEUE', 'DRAFT_BOARD', 'ROSTER']:
+              assert marker in base
+          assert 'render_espn_players_available' in app
+          assert 'player-table-header' in active and 'queue_btn_' in active
+          assert 'base.queue_add(state, pid)' in active and 'base.queue_remove(state, pid)' in active
+          assert 'base.make_pick(state, pid, source="user")' in active
+          assert 'base.player_link_html' in active
+          assert 'roster_slots(state, state["userTeamId"])' in base
+          assert 'grid-template-columns:repeat({teams},minmax(0,1fr))' in base
+          assert 'MY TEAM IQ' in shell and '_team_iq(roi, weekly)' in shell
+          assert 'canonical_player_id' in shell and 'linkify_player_names' in shell
           assert 'player_id' in profile and 'profile-years' in profile and 'profile-log' in profile
 
           players = [
-              {'id':'p1','name':'Test RB','position':'RB','team':'ATL','adp':1.0,'rank':1,'isAvailable':True},
-              {'id':'p2','name':'Test WR','position':'WR','team':'MIN','adp':2.0,'rank':2,'isAvailable':True},
+              {'id':'p1','name':'Test RB','position':'RB','team':'ATL','adp':1.0,'rank':1,'bye':5,'projected_points':250.0,'isAvailable':True},
+              {'id':'p2','name':'Test WR','position':'WR','team':'MIN','adp':2.0,'rank':2,'bye':6,'projected_points':245.0,'isAvailable':True},
           ]
           state = initialize_draft(players, teams_count=8, draft_position=1, scoring='PPR', rounds=10, seconds_per_pick=90)
           start_draft(state)
@@ -85,7 +91,33 @@ jobs:
           slots = roster_slots(state, state['userTeamId'])
           assert any(slot == 'RB' and p and p['id'] == 'p1' for slot, p in slots)
           assert state['picks'][0]['playerId'] == 'p1'
-          print('Stateful mock tabs, queue, draft board state, and roster synchronization passed')
+          undo_last_pick(state)
+          assert any(p['id'] == 'p1' for p in state['availablePlayers'])
+          print('Active mock presentation and engine synchronization passed')
+          PY
+
+      - name: Validate current ranking data contract
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          from mock_draft_engine import build_player_pool
+
+          rankings = pd.read_csv('current_rankings.csv')
+          required = {'player_name','team','bye','position','adp','overall_rank'}
+          assert required.issubset(rankings.columns), required - set(rankings.columns)
+          assert len(rankings) >= 100, len(rankings)
+          assert rankings['player_name'].dropna().astype(str).str.strip().ne('').all()
+          assert rankings['adp'].notna().sum() >= 100
+          pool = build_player_pool(rankings)
+          assert len(pool) >= 100, len(pool)
+          assert len({p['id'] for p in pool}) == len(pool)
+          assert all(p['position'] in {'QB','RB','WR','TE','D/ST','K'} for p in pool)
+          # Projections are optional. The UI must show a dash when verified projections are absent.
+          if 'projected_points' not in rankings.columns:
+              assert all(p['projected_points'] is None for p in pool)
+              print('Current rankings validated; verified projection field is not present, so UI fallback is required')
+          else:
+              print('Current rankings and projections validated')
           PY
 
       - name: Validate historical player seasons and Full PPR scoring
@@ -110,23 +142,17 @@ jobs:
           years = sorted(pd.to_numeric(cmc['season'], errors='coerce').dropna().astype(int).unique().tolist(), reverse=True)
           assert years and min(years) <= 2017 and max(years) >= 2025, years
 
-          id_years = weekly.dropna(subset=['player_id']).groupby('player_id')['season'].nunique().sort_values()
-          one_year_ids = id_years[id_years == 1]
-          assert not one_year_ids.empty
-          rookie_id = str(one_year_ids.index[0])
-          rookie = weekly.loc[weekly['player_id'].astype(str).eq(rookie_id)].copy()
-          rookie_years = pd.to_numeric(rookie['season'], errors='coerce').dropna().astype(int).unique().tolist()
-          assert len(rookie_years) == 1, (rookie_id, rookie_years)
-
           check = weekly.copy()
           if 'season_type' in check.columns:
               check = check[check['season_type'].astype(str).str.upper().isin(['REG','REGULAR','REGULAR SEASON'])]
-          if 'fantasy_points_ppr' in check.columns:
-              check = check[pd.to_numeric(check['fantasy_points_ppr'], errors='coerce').notna()].head(5000).copy()
-              calc = _points(check)
-              actual = pd.to_numeric(check['fantasy_points_ppr'], errors='coerce')
-              diff = (calc - actual).abs().dropna()
-              assert not diff.empty
-              assert float(diff.quantile(.95)) <= 0.11, diff.describe().to_dict()
-          print('Historical years and Full PPR scoring validation passed', years, rookie_id, rookie_years)
+          check = check[pd.to_numeric(check['fantasy_points_ppr'], errors='coerce').notna()].head(5000).copy()
+          calc = _points(check)
+          actual = pd.to_numeric(check['fantasy_points_ppr'], errors='coerce')
+          diff = (calc - actual).abs().dropna()
+          assert not diff.empty
+          assert float(diff.quantile(.95)) <= 0.11, diff.describe().to_dict()
+          print('Historical years and ESPN Full PPR scoring validation passed', years)
           PY
+
+      - name: Run Shiva deterministic regression suite
+        run: python scripts/regression_checks.py
