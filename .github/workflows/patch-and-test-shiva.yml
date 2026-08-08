@@ -11,6 +11,8 @@ on:
       - player_profile.py
       - shiva_chatgpt_service.py
       - shiva_engine.py
+      - streamlit_branding_fix.py
+      - splash_asset.py
       - current_rankings.csv
       - player_birth_dates.csv
       - player_weekly_master_2014_2025.csv.gz
@@ -36,10 +38,29 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile production modules
-        run: python -m py_compile app.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py shiva_chatgpt_service.py shiva_engine.py
+        run: python -m py_compile app.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py shiva_chatgpt_service.py shiva_engine.py streamlit_branding_fix.py splash_asset.py
 
       - name: Import production modules
-        run: python -c "import streamlit as st; import shiva_app_v2, mock_draft_engine, mock_draft_ui_v2, player_profile; print('Streamlit', st.__version__, 'production imports OK')"
+        run: python -c "import streamlit as st; import shiva_app_v2, mock_draft_engine, mock_draft_ui_v2, player_profile, streamlit_branding_fix, splash_asset; print('Streamlit', st.__version__, 'production imports OK')"
+
+      - name: Verify splash and Streamlit mobile chrome suppression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('app.py').read_text()
+          branding = Path('streamlit_branding_fix.py').read_text()
+          splash = Path('splash_asset.py').read_text()
+          assert 'shiva-startup-splash' in app
+          assert 'animation:shivaSplashExit 2.5s' in app
+          assert 'data:image/webp;base64' in app
+          assert len(splash) > 10000 and 'SPLASH_WEBP_BASE64' in splash
+          assert 'MutationObserver' in branding
+          assert 'stStatusWidget' in branding
+          assert 'stAppDeployButton' in branding
+          assert 'viewerBadge' in branding
+          assert 'share.streamlit.io' in branding
+          print('Splash and mobile Streamlit chrome suppression checks passed')
+          PY
 
       - name: Verify stateful mock draft navigation and queue roster synchronization
         run: |
