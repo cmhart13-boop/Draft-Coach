@@ -6,6 +6,14 @@ on:
     paths:
       - app.py
       - shiva_app_v3.py
+      - shiva_app_v2.py
+      - mock_draft_ui_v2.py
+      - mock_draft_players_espn.py
+      - mobile_bottom_nav_fix.py
+      - streamlit_branding_fix.py
+      - player_profile.py
+      - espn_news_service.py
+      - current_rankings.csv
       - .github/workflows/test-pages-matrix.yml
   workflow_dispatch:
 
@@ -47,5 +55,6 @@ jobs:
           at.session_state['page'] = page
           at.run(timeout=90)
           assert not at.exception, (page, [str(x) for x in at.exception])
+          assert at.session_state['page'] == page, (page, at.session_state['page'])
           print('PASS', page)
           PY
