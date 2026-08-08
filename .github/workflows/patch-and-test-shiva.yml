@@ -41,23 +41,51 @@ jobs:
       - name: Import production modules
         run: python -c "import streamlit as st; import shiva_app_v2, mock_draft_engine, mock_draft_ui_v2, player_profile; print('Streamlit', st.__version__, 'production imports OK')"
 
-      - name: Verify mobile draft and universal player routing
+      - name: Verify stateful mock draft navigation and queue roster synchronization
         run: |
           python - <<'PY'
           from pathlib import Path
+          from mock_draft_engine import initialize_draft, start_draft, queue_add, queue_remove, make_pick, roster_slots
+
           mock = Path('mock_draft_ui_v2.py').read_text()
           app = Path('shiva_app_v2.py').read_text()
           profile = Path('player_profile.py').read_text()
-          assert 'DRAFT BOARD' in mock and 'QUEUE' in mock and 'TEAM' in mock and 'RESULTS' in mock
-          assert 'mock-player' in mock and 'mock-q' in mock and 'draft-status' in mock
+
+          assert '("PLAYERS_AVAILABLE", "PLAYERS AVAILABLE")' in mock
+          assert '("QUEUE", "QUEUE")' in mock
+          assert '("DRAFT_BOARD", "DRAFT BOARD")' in mock
+          assert '("ROSTER", "ROSTER")' in mock
+          assert 'st.session_state[TAB_KEY] = key' in mock
+          assert 'queue_btn_' in mock and 'queue_add(state, pid)' in mock and 'queue_remove(state, pid)' in mock
+          assert 'draft_btn_' in mock and 'make_pick(state, pid, source="user")' in mock
+          assert 'roster_slots(state, state["userTeamId"])' in mock
           assert 'grid-template-columns:repeat({teams},minmax(0,1fr))' in mock
+          assert 'DRAFT BOARD' in app and 'Mock Drafts • 2026 Rankings' in app
+          assert 'MY TEAM IQ' in app and 'team_iq_league' in app and 'team_iq_manager' in app and 'team_iq_year' in app
           assert 'player_profile_href' in mock and 'player_link_html' in mock
-          assert 'canonical_player_id' in app and 'player_link_html' in app
-          assert 'linkify_player_names' in app
-          assert 'player_id' in profile and 'player_profile_href' in profile
-          assert 'profile-years' in profile and 'profile-log' in profile
-          assert 'favorite_player_ids' in profile
-          print('Mobile draft UI and centralized player routing checks passed')
+          assert 'canonical_player_id' in app and 'linkify_player_names' in app
+          assert 'player_id' in profile and 'profile-years' in profile and 'profile-log' in profile
+
+          players = [
+              {'id':'p1','name':'Test RB','position':'RB','team':'ATL','adp':1.0,'rank':1,'isAvailable':True},
+              {'id':'p2','name':'Test WR','position':'WR','team':'MIN','adp':2.0,'rank':2,'isAvailable':True},
+          ]
+          state = initialize_draft(players, teams_count=8, draft_position=1, scoring='PPR', rounds=10, seconds_per_pick=90)
+          start_draft(state)
+          queue_add(state, 'p1')
+          assert state['queue'] == ['p1']
+          queue_remove(state, 'p1')
+          assert state['queue'] == []
+          queue_add(state, 'p1')
+          make_pick(state, 'p1', source='user')
+          assert 'p1' not in state['queue']
+          assert all(p['id'] != 'p1' for p in state['availablePlayers'])
+          user_team = next(t for t in state['teams'] if t['id'] == state['userTeamId'])
+          assert any(p['id'] == 'p1' for p in user_team['roster'])
+          slots = roster_slots(state, state['userTeamId'])
+          assert any(slot == 'RB' and p and p['id'] == 'p1' for slot, p in slots)
+          assert state['picks'][0]['playerId'] == 'p1'
+          print('Stateful mock tabs, queue, draft board state, and roster synchronization passed')
           PY
 
       - name: Validate historical player seasons and Full PPR scoring
@@ -82,8 +110,6 @@ jobs:
           years = sorted(pd.to_numeric(cmc['season'], errors='coerce').dropna().astype(int).unique().tolist(), reverse=True)
           assert years and min(years) <= 2017 and max(years) >= 2025, years
 
-          # Dynamic-year behavior is keyed to permanent player_id, not just a name string.
-          # This avoids false matches when two NFL players share the same name.
           id_years = weekly.dropna(subset=['player_id']).groupby('player_id')['season'].nunique().sort_values()
           one_year_ids = id_years[id_years == 1]
           assert not one_year_ids.empty
@@ -92,7 +118,6 @@ jobs:
           rookie_years = pd.to_numeric(rookie['season'], errors='coerce').dropna().astype(int).unique().tolist()
           assert len(rookie_years) == 1, (rookie_id, rookie_years)
 
-          # Validate ESPN-style Full PPR calculation against loaded PPR points.
           check = weekly.copy()
           if 'season_type' in check.columns:
               check = check[check['season_type'].astype(str).str.upper().isin(['REG','REGULAR','REGULAR SEASON'])]
