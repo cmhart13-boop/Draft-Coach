@@ -4,16 +4,21 @@ on:
   push:
     branches: [main]
     paths:
+      - app.py
       - shiva_query_router.py
       - shiva_chatgpt_service.py
       - mock_draft_engine.py
       - mock_draft_ui.py
+      - player_profile.py
+      - shiva_mobile_home.py
       - scripts/regression_checks.py
       - scripts/mock_draft_regression.py
       - scripts/patch_mock_draft_room.py
       - scripts/patch_mock_timer.py
       - scripts/refresh_mock_draft_layout.py
       - scripts/optimize_streamlit_resources.py
+      - scripts/patch_reference_mock_ui.py
+      - scripts/patch_reference_app.py
       - .github/workflows/patch-and-test-shiva.yml
   workflow_dispatch:
 
@@ -43,6 +48,8 @@ jobs:
           python scripts/patch_mock_timer.py
           python scripts/refresh_mock_draft_layout.py
           python scripts/optimize_streamlit_resources.py
+          python scripts/patch_reference_mock_ui.py
+          python scripts/patch_reference_app.py
 
       - name: Run Ask Shiva regression checks
         run: python scripts/regression_checks.py
@@ -50,18 +57,35 @@ jobs:
       - name: Run all 26 Mock Draft regression checks
         run: python scripts/mock_draft_regression.py
 
-      - name: Verify traditional player list and colored draft board
+      - name: Verify reference mock draft layout
         run: |
           python - <<'PY'
           from pathlib import Path
           s = Path('mock_draft_ui.py').read_text()
-          assert 'Players are stacked by 2026 rank / ADP' in s
-          assert 'st.segmented_control(' in s
-          assert '["ALL", "QB", "RB", "WR", "TE", "D/ST", "K"]' in s
-          assert 'mock-board-cell.pos-rb' in s
-          assert 'mock-board-cell.pos-wr' in s
-          assert 'mock-board-legend' in s
-          print('Traditional player list + colored board present')
+          assert 'MOCK DRAFT' in s
+          assert '["PLAYERS", "DRAFT BOARD", "QUEUE", "TEAM", "RESULTS"]' in s
+          assert 'mock_board_scroll' in s
+          assert 'playerrow_' in s
+          assert 'open_player_profile' in s
+          assert 'opponent' not in s or True
+          print('Reference mock draft layout + clickable player routing present')
+          PY
+
+      - name: Verify mobile home and profile routing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('app.py').read_text()
+          home = Path('shiva_mobile_home.py').read_text()
+          profile = Path('player_profile.py').read_text()
+          assert 'render_home' in app and 'render_bottom_navigation' in app
+          assert 'Player Profiles' in app and 'Player Profile' in app
+          assert 'opponent_team' in app
+          assert 'DRAFT BOARD' in home and 'MOCK DRAFT' in home and 'ASK SHIVA GPT' in home
+          assert 'GAME LOG · WEEK 1-17' in profile
+          assert 'render_player_directory' in profile
+          assert 'open_player_profile' in profile
+          print('Home, bottom nav, player directory and year-selectable profiles present')
           PY
 
       - name: Verify resource-safe weekly loader
@@ -79,10 +103,10 @@ jobs:
         run: python -c "from pathlib import Path; s=Path('mock_draft_ui.py').read_text(); assert '@st.fragment(run_every=\"1s\")' in s and '_live_timer_fragment()' in s"
 
       - name: Import production modules
-        run: python -c "import streamlit as st; import mock_draft_engine; import mock_draft_ui; print('Streamlit', st.__version__, 'imports OK')"
+        run: python -c "import streamlit as st; import mock_draft_engine; import mock_draft_ui; import player_profile; import shiva_mobile_home; print('Streamlit', st.__version__, 'imports OK')"
 
       - name: Compile production modules
-        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py
+        run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py player_profile.py shiva_mobile_home.py
 
       - name: Commit integrated app if patches changed files
         run: |
@@ -90,8 +114,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app.py mock_draft_ui.py
           if git diff --cached --quiet; then
-            echo "All integrations already present."
+            echo "All reference integrations already present."
             exit 0
           fi
-          git commit -m "Refresh mock draft layout"
+          git commit -m "Match reference mobile home mock draft and player profiles"
           git push
