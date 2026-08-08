@@ -15,15 +15,21 @@ from player_profile import player_link_html, player_profile_href
 STATE_KEY = "mock_draft_state_v2"
 POOL_KEY = "mock_draft_original_pool_v2"
 TAB_KEY = "mock2_tab"
-POS_STYLE = {
-    "QB": ("#d5232b", "#8a1017"),
-    "RB": ("#ff7a00", "#a94300"),
-    "WR": ("#138dd8", "#075688"),
-    "TE": ("#42a92d", "#205f17"),
-    "FLEX": ("#9341d2", "#58217f"),
-    "K": ("#58636e", "#303941"),
-    "D/ST": ("#8d5008", "#52300a"),
+
+# Single source of truth for every mock-draft position color treatment.
+POSITION_COLORS = {
+    "QB": {"card": "#261B38", "border": "#7754A8", "badge": "#9B6FE8"},
+    "RB": {"card": "#332411", "border": "#8A5515", "badge": "#F28C18"},
+    "WR": {"card": "#102B33", "border": "#24758A", "badge": "#39B5DE"},
+    "TE": {"card": "#16332F", "border": "#3C8F84", "badge": "#4DD8C5"},
+    "D/ST": {"card": "#342E12", "border": "#A18A21", "badge": "#F0CF32"},
+    "DST": {"card": "#342E12", "border": "#A18A21", "badge": "#F0CF32"},
+    "DEF": {"card": "#342E12", "border": "#A18A21", "badge": "#F0CF32"},
+    "K": {"card": "#351B2A", "border": "#A64B79", "badge": "#E968A5"},
+    "FLEX": {"card": "#151515", "border": "#444444", "badge": "#777777"},
 }
+DEFAULT_POSITION_COLORS = {"card": "#151515", "border": "#444444", "badge": "#777777"}
+
 TABS = (
     ("PLAYERS_AVAILABLE", "PLAYERS AVAILABLE"),
     ("QUEUE", "QUEUE"),
@@ -32,70 +38,98 @@ TABS = (
 )
 
 
+def _position_key(pos) -> str:
+    key = str(pos or "").upper().strip()
+    return "D/ST" if key in {"D/ST", "DST", "DEF"} else key
+
+
+def _position_style(pos) -> dict[str, str]:
+    return POSITION_COLORS.get(_position_key(pos), DEFAULT_POSITION_COLORS)
+
+
+def _position_slug(pos) -> str:
+    key = _position_key(pos)
+    return "dst" if key == "D/ST" else key.lower()
+
+
+def _position_badge(pos) -> str:
+    style = _position_style(pos)
+    label = "D/ST" if _position_key(pos) == "D/ST" else str(pos or "")
+    return (
+        f'<span class="position-badge" style="background:{style["badge"]};">'
+        f'{html.escape(label)}</span>'
+    )
+
+
 def _css() -> None:
+    row_rules = []
+    button_rules = []
+    for pos in ("QB", "RB", "WR", "TE", "K", "D/ST", "FLEX"):
+        slug = _position_slug(pos)
+        style = _position_style(pos)
+        row_rules.append(
+            f'div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-{slug})'
+            f'{{background:{style["card"]}!important;border-color:{style["border"]}!important}}'
+        )
+        button_rules.append(
+            f'div[data-testid="stColumn"]:has(.pos-marker-{slug}) button'
+            f'{{background:{style["card"]}!important;border-color:{style["border"]}!important;color:{style["badge"]}!important}}'
+        )
+    position_css = "\n".join(button_rules + row_rules)
+
     st.markdown(
-        """
+        f"""
 <style>
-.mock-title{text-align:center;font-size:22px;font-weight:1000;line-height:1}
-.mock-sub{text-align:center;font-size:11px;color:#d7e0e7;margin-top:4px}
-.mock-nav-marker,.pos-marker,.player-row-marker{display:none!important}
-div[data-testid="stVerticalBlock"]:has(.mock-nav-marker){gap:0!important}
-div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) div[data-testid="stHorizontalBlock"]{gap:2px!important;border-bottom:1px solid #27323b;margin:5px 0 8px}
-div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button{
+.mock-title{{text-align:center;font-size:22px;font-weight:1000;line-height:1}}
+.mock-sub{{text-align:center;font-size:11px;color:#d7e0e7;margin-top:4px}}
+.mock-nav-marker,.pos-marker,.player-row-marker{{display:none!important}}
+div[data-testid="stVerticalBlock"]:has(.mock-nav-marker){{gap:0!important}}
+div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) div[data-testid="stHorizontalBlock"]{{gap:2px!important;border-bottom:1px solid #27323b;margin:5px 0 8px}}
+div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button{{
   min-height:38px!important;height:38px!important;padding:0 2px!important;border:0!important;border-radius:0!important;
   background:transparent!important;color:#fff!important;font-size:9px!important;font-weight:1000!important;box-shadow:none!important
-}
-div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button[kind="primary"]{
+}}
+div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button[kind="primary"]{{
   color:#dfff00!important;border-bottom:2px solid #dfff00!important;background:transparent!important
-}
-div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button[kind="primary"] p{color:#dfff00!important}
-.mock-filter-button button{height:38px!important;min-height:38px!important}
-div[data-testid="stColumn"]:has(.pos-marker-qb) button{background:linear-gradient(135deg,#d5232b,#8a1017)!important;border-color:#d5232b!important}
-div[data-testid="stColumn"]:has(.pos-marker-rb) button{background:linear-gradient(135deg,#ff7a00,#a94300)!important;border-color:#ff7a00!important}
-div[data-testid="stColumn"]:has(.pos-marker-wr) button{background:linear-gradient(135deg,#138dd8,#075688)!important;border-color:#138dd8!important}
-div[data-testid="stColumn"]:has(.pos-marker-te) button{background:linear-gradient(135deg,#42a92d,#205f17)!important;border-color:#42a92d!important}
-div[data-testid="stColumn"]:has(.pos-marker-flex) button{background:linear-gradient(135deg,#9341d2,#58217f)!important;border-color:#9341d2!important}
-div[data-testid="stColumn"]:has(.pos-marker-k) button{background:linear-gradient(135deg,#58636e,#303941)!important;border-color:#58636e!important}
-div[data-testid="stColumn"]:has(.pos-marker-dst) button{background:linear-gradient(135deg,#8d5008,#52300a)!important;border-color:#8d5008!important}
-div[data-testid="stColumn"]:has(.pos-marker) button{min-height:30px!important;height:30px!important;padding:0!important;font-size:9px!important;border-radius:6px!important}
-.mock-list-head{display:grid;grid-template-columns:30px minmax(0,1fr) 34px 32px 36px 40px 44px;gap:2px;padding:5px;color:#c4cbd2;font-size:8px;font-weight:900;background:#091017;border-radius:6px;margin-top:4px}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker){
-  border-radius:7px!important;border:1px solid rgba(255,255,255,.11)!important;padding:2px 4px!important;margin:2px 0!important;
+}}
+div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button[kind="primary"] p{{color:#dfff00!important}}
+.mock-filter-button button{{height:38px!important;min-height:38px!important}}
+{position_css}
+div[data-testid="stColumn"]:has(.pos-marker) button{{min-height:30px!important;height:30px!important;padding:0!important;font-size:9px!important;border-radius:6px!important}}
+.mock-list-head{{display:grid;grid-template-columns:30px minmax(0,1fr) 34px 32px 36px 40px 44px;gap:2px;padding:5px;color:#c4cbd2;font-size:8px;font-weight:900;background:#091017;border-radius:6px;margin-top:4px}}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker){{
+  border-radius:7px!important;border:1px solid #444!important;padding:2px 4px!important;margin:2px 0!important;
   box-shadow:none!important
-}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-qb){background:linear-gradient(90deg,#8a1017,#d5232b)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-rb){background:linear-gradient(90deg,#a94300,#ff7a00)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-wr){background:linear-gradient(90deg,#075688,#138dd8)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-te){background:linear-gradient(90deg,#205f17,#42a92d)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-k){background:linear-gradient(90deg,#303941,#58636e)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-dst){background:linear-gradient(90deg,#52300a,#8d5008)!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) div[data-testid="stHorizontalBlock"]{gap:2px!important;align-items:center!important}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) button{
+}}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) div[data-testid="stHorizontalBlock"]{{gap:2px!important;align-items:center!important}}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) button{{
   min-height:27px!important;height:27px!important;padding:0 3px!important;border-radius:5px!important;font-size:8px!important;font-weight:1000!important
-}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) [data-testid="stMarkdownContainer"]{margin:0!important}
-.mock-rank{width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.18);font-size:10px;font-weight:1000}
-.mock-name{font-size:10.5px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.05}
-.mock-cell{font-size:8px;font-weight:900;text-align:center;white-space:nowrap}
-.mock-adp{font-size:8px;font-weight:1000;text-align:right}
-.queue-row,.team-row{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #1d2a34}
-.slot{color:#dfff00;font-size:10px;font-weight:1000}
-.section-title{font-size:14px;font-weight:1000;margin:10px 0 5px}
-.mock-name-plain{font-size:12px!important;font-weight:900!important;color:#fff!important;text-decoration:none!important}
-.mock-spacer{height:68px}
-.settings-card{background:#07121b;border:1px solid #24405a;border-radius:9px;padding:8px;margin:5px 0 8px}
-.settings-line{font-size:10px;color:#cbd4db}
-.draft-status{position:fixed;left:50%;bottom:67px;transform:translateX(-50%);width:min(500px,calc(100vw - 20px));z-index:9998;display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#050b10;border:1px solid #25394a;border-radius:9px;padding:8px 9px;box-shadow:0 -5px 20px rgba(0,0,0,.42)}
-.clock-label{font-size:10px}.clock-pick{font-size:13px;font-weight:1000;color:#dfff00}.clock-team{font-size:11px;font-weight:900}.clock-timer{background:#dfff00;color:#061006;border-radius:6px;padding:6px 8px;font-size:14px;font-weight:1000}
-.board-top{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin:3px 0 4px}.board-title{text-align:center;font-size:17px;font-weight:1000}.board-round{text-align:center;font-size:9px;color:#fff}.board-meta{text-align:right;font-size:8px}
-.board-legend{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin:4px 0 7px;font-size:7px;font-weight:900}.legend-dot{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:2px}
-.board-wrap{background:#020609;border:1px solid #1c2b36;border-radius:7px;padding:3px;overflow:hidden}.draft-board{display:grid;gap:2px;width:100%}.team-head{background:#071018;border:1px solid #26313a;border-radius:3px;padding:4px 0;font-size:6px;font-weight:1000;text-align:center;overflow:hidden}
-.pick-card{min-height:45px;border-radius:3px;padding:2px 1px;border:1px solid rgba(255,255,255,.12);overflow:hidden}.pick-no{font-size:6px;color:#fff9}.pick-name{font-size:6px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;display:block;line-height:1.05;overflow-wrap:anywhere}.pick-pos{font-size:6px;text-align:center;font-weight:900;margin-top:2px}
-@media(max-width:390px){
-  div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button{font-size:7.6px!important}
-  .mock-list-head{grid-template-columns:27px minmax(0,1fr) 32px 28px 32px 37px 39px;font-size:7px}
-  .mock-name{font-size:9.5px!important}.mock-cell,.mock-adp{font-size:7px}.pick-card{min-height:41px}.pick-name{font-size:5.5px!important}.team-head{font-size:5.5px}
-}
+}}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) [data-testid="stMarkdownContainer"]{{margin:0!important}}
+.mock-rank{{width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.18);font-size:10px;font-weight:1000}}
+.mock-name{{font-size:10.5px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.05}}
+.mock-cell{{font-size:8px;font-weight:900;text-align:center;white-space:nowrap}}
+.mock-adp{{font-size:8px;font-weight:1000;text-align:right}}
+.position-badge{{display:inline-block;min-width:25px;padding:2px 5px;border-radius:999px;color:#071018;font-size:8px;font-weight:1000;text-align:center;line-height:1.15}}
+.queue-row,.team-row{{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #1d2a34}}
+.slot{{color:#dfff00;font-size:10px;font-weight:1000}}
+.section-title{{font-size:14px;font-weight:1000;margin:10px 0 5px}}
+.mock-name-plain{{font-size:12px!important;font-weight:900!important;color:#fff!important;text-decoration:none!important}}
+.mock-spacer{{height:68px}}
+.settings-card{{background:#07121b;border:1px solid #24405a;border-radius:9px;padding:8px;margin:5px 0 8px}}
+.settings-line{{font-size:10px;color:#cbd4db}}
+.draft-status{{position:fixed;left:50%;bottom:67px;transform:translateX(-50%);width:min(500px,calc(100vw - 20px));z-index:9998;display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#050b10;border:1px solid #25394a;border-radius:9px;padding:8px 9px;box-shadow:0 -5px 20px rgba(0,0,0,.42)}}
+.clock-label{{font-size:10px}}.clock-pick{{font-size:13px;font-weight:1000;color:#dfff00}}.clock-team{{font-size:11px;font-weight:900}}.clock-timer{{background:#dfff00;color:#061006;border-radius:6px;padding:6px 8px;font-size:14px;font-weight:1000}}
+.board-top{{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin:3px 0 4px}}.board-title{{text-align:center;font-size:17px;font-weight:1000}}.board-round{{text-align:center;font-size:9px;color:#fff}}.board-meta{{text-align:right;font-size:8px}}
+.board-legend{{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin:4px 0 7px;font-size:7px;font-weight:900}}.legend-dot{{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:2px}}
+.board-wrap{{background:#020609;border:1px solid #1c2b36;border-radius:7px;padding:3px;overflow:hidden}}.draft-board{{display:grid;gap:2px;width:100%}}.team-head{{background:#071018;border:1px solid #26313a;border-radius:3px;padding:4px 0;font-size:6px;font-weight:1000;text-align:center;overflow:hidden}}
+.pick-card{{min-height:45px;border-radius:3px;padding:2px 1px;border:1px solid #444;overflow:hidden}}.pick-no{{font-size:6px;color:#fff9}}.pick-name{{font-size:6px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;display:block;line-height:1.05;overflow-wrap:anywhere}}.pick-pos{{font-size:6px;text-align:center;font-weight:900;margin-top:2px}}
+.pick-pos .position-badge{{font-size:6px;min-width:20px;padding:1px 4px}}
+@media(max-width:390px){{
+  div[data-testid="stVerticalBlock"]:has(.mock-nav-marker) button{{font-size:7.6px!important}}
+  .mock-list-head{{grid-template-columns:27px minmax(0,1fr) 32px 28px 32px 37px 39px;font-size:7px}}
+  .mock-name{{font-size:9.5px!important}}.mock-cell,.mock-adp{{font-size:7px}}.pick-card{{min-height:41px}}.pick-name{{font-size:5.5px!important}}.team-head{{font-size:5.5px}}
+}}
 </style>
 """,
         unsafe_allow_html=True,
@@ -104,10 +138,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.player-row-marker) [data-te
 
 def _state():
     return st.session_state.get(STATE_KEY)
-
-
-def _colors(pos):
-    return POS_STYLE.get(str(pos).upper(), ("#52606c", "#29313a"))
 
 
 def _return_query(tab):
@@ -223,7 +253,7 @@ def _run_shiva(state, history, roi, rankings, weekly, ask_shiva_func, api_key):
 def _player_row(state, player, on_clock: bool, queued: set[str]) -> None:
     pid = str(player["id"])
     pos = str(player.get("position") or "")
-    slug = "dst" if pos == "D/ST" else pos.lower()
+    slug = _position_slug(pos)
     with st.container(border=True):
         st.markdown(f'<span class="player-row-marker player-row-{slug}"></span>', unsafe_allow_html=True)
         c1, c2, c3, c4, c5, c6, c7 = st.columns([0.48, 2.05, 0.48, 0.52, 0.58, 0.62, 0.72], gap="small")
@@ -247,7 +277,7 @@ def _player_row(state, player, on_clock: bool, queued: set[str]) -> None:
                 st.session_state[STATE_KEY] = state
                 st.rerun()
         with c4:
-            st.markdown(f'<div class="mock-cell">{html.escape(pos)}</div>', unsafe_allow_html=True)
+            st.markdown(_position_badge(pos), unsafe_allow_html=True)
         with c5:
             st.markdown(f'<div class="mock-cell">{html.escape(str(player.get("team") or "—"))}</div>', unsafe_allow_html=True)
         with c6:
@@ -358,10 +388,10 @@ def _board(state):
         unsafe_allow_html=True,
     )
     legend = []
-    for pos in ("QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"):
-        c1, _ = _colors(pos)
+    for pos in ("QB", "RB", "WR", "TE", "K", "D/ST"):
+        style = _position_style(pos)
         label = "DEF" if pos == "D/ST" else pos
-        legend.append(f'<span><i class="legend-dot" style="background:{c1}"></i>{label}</span>')
+        legend.append(f'<span><i class="legend-dot" style="background:{style["badge"]}"></i>{label}</span>')
     st.markdown('<div class="board-legend">' + "".join(legend) + "</div>", unsafe_allow_html=True)
 
     picks = {int(p["pickNumber"]): p for p in state.get("picks", [])}
@@ -374,10 +404,10 @@ def _board(state):
             pick = picks.get(overall)
             rp = (overall - 1) % teams + 1
             if pick:
-                c1c, c2c = _colors(pick.get("position"))
                 pid = str(pick.get("playerId"))
                 pname = str(pick.get("playerName"))
                 pos = str(pick.get("position"))
+                style = _position_style(pos)
                 href = player_profile_href(
                     pname,
                     pid,
@@ -389,8 +419,8 @@ def _board(state):
                     f'{html.escape(_compact_name(pname))}</a>'
                 )
                 parts.append(
-                    f'<div class="pick-card" style="background:linear-gradient(145deg,{c1c},{c2c})">'
-                    f'<div class="pick-no">{rnd}.{rp}</div>{link}<div class="pick-pos">{html.escape(pos)}</div></div>'
+                    f'<div class="pick-card" style="background:{style["card"]};border-color:{style["border"]}">'
+                    f'<div class="pick-no">{rnd}.{rp}</div>{link}<div class="pick-pos">{_position_badge(pos)}</div></div>'
                 )
             else:
                 parts.append(f'<div class="pick-card" style="background:#071018"><div class="pick-no">{rnd}.{rp}</div></div>')
@@ -410,7 +440,7 @@ def _queue(state):
             continue
         c1, c2, c3 = st.columns([0.65, 2.7, 0.75], gap="small")
         with c1:
-            st.markdown(f'<div class="slot">{html.escape(str(player.get("position")))}</div>', unsafe_allow_html=True)
+            st.markdown(_position_badge(player.get("position")), unsafe_allow_html=True)
         with c2:
             link = player_link_html(
                 str(player["id"]),
@@ -441,10 +471,10 @@ def _roster(state):
             if player
             else '<span style="color:#75808a">—</span>'
         )
-        pos = html.escape(str(player.get("position"))) if player else ""
+        pos_badge = _position_badge(player.get("position")) if player else ""
         st.markdown(
             f'<div class="team-row"><div class="slot">{html.escape(slot)}</div><div>{body}</div>'
-            f'<div class="mock-cell">{pos}</div></div>',
+            f'<div class="mock-cell">{pos_badge}</div></div>',
             unsafe_allow_html=True,
         )
 
