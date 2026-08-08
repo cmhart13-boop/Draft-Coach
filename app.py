@@ -1,6 +1,9 @@
+import base64
+import time
+from pathlib import Path
+
 import streamlit as st
 
-# Page configuration must be the first Streamlit command on every run.
 st.set_page_config(
     page_title="Shiva Intelligence",
     page_icon="🏆",
@@ -9,50 +12,51 @@ st.set_page_config(
 )
 
 from shiva_app_v2 import run
-from splash_asset import SPLASH_WEBP_BASE64
 from streamlit_branding_fix import hide_streamlit_branding
 
 
-# IMPORTANT: do not block the Streamlit event loop with time.sleep here.
-# The splash is a browser-side fixed overlay so the image actually paints
-# immediately, stays visible for ~2.5 seconds, then fades away while the Home
-# screen is already rendered underneath it.
+def _ensure_splash_asset() -> Path:
+    asset_dir = Path("assets")
+    asset_dir.mkdir(exist_ok=True)
+    splash_path = asset_dir / "1_shiva_intelligence_splash.webp"
+    if not splash_path.exists():
+        parts = []
+        chunks_dir = Path("splash_chunks")
+        for chunk in sorted(chunks_dir.glob("*.txt")):
+            parts.append(chunk.read_text().strip())
+        splash_path.write_bytes(base64.b64decode("".join(parts)))
+    return splash_path
+
+
+hide_streamlit_branding()
+
 if not st.session_state.get("_shiva_splash_seen", False):
-    st.session_state["_shiva_splash_seen"] = True
-    st.session_state["page"] = "Home"
+    splash = _ensure_splash_asset()
     st.markdown(
-        f"""
+        """
         <style>
-        @keyframes shivaSplashExit {{
-            0%, 88% {{ opacity:1; visibility:visible; }}
-            100% {{ opacity:0; visibility:hidden; }}
-        }}
-        .shiva-startup-splash {{
-            position:fixed !important;
-            inset:0 !important;
-            width:100vw !important;
-            height:100dvh !important;
-            z-index:2147483647 !important;
-            background:#050b58 url("data:image/webp;base64,{SPLASH_WEBP_BASE64}") center center / contain no-repeat !important;
-            pointer-events:none !important;
-            opacity:1;
-            visibility:visible;
-            animation:shivaSplashExit 2.5s ease-out forwards;
-        }}
-        @media (max-width:600px) {{
-            .shiva-startup-splash {{
-                background-size:cover !important;
-                background-position:center top !important;
-            }}
-        }}
+        [data-testid="stAppViewContainer"] > .main .block-container {
+            padding: 0 !important;
+            max-width: 100% !important;
+        }
+        .stImage img {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100dvh !important;
+            object-fit: cover !important;
+            z-index: 999999 !important;
+        }
         </style>
-        <div class="shiva-startup-splash" aria-label="Shiva Intelligence loading screen"></div>
         """,
         unsafe_allow_html=True,
     )
+    st.image(str(splash), use_container_width=True)
+    time.sleep(2.5)
+    st.session_state["_shiva_splash_seen"] = True
+    st.session_state["page"] = "Home"
+    st.rerun()
 
-# shiva_app_v2 still owns the main application renderer and currently contains
-# a legacy set_page_config call. Suppress only that duplicate call while it runs.
 _original_set_page_config = st.set_page_config
 st.set_page_config = lambda *args, **kwargs: None
 try:
@@ -60,6 +64,4 @@ try:
 finally:
     st.set_page_config = _original_set_page_config
 
-# Run the branding suppression after the app renders so Community Cloud chrome
-# inserted late in the DOM is removed too.
 hide_streamlit_branding()
