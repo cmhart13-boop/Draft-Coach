@@ -13,6 +13,7 @@ on:
       - shiva_mobile_home.py
       - scripts/regression_checks.py
       - scripts/mock_draft_regression.py
+      - scripts/prepare_reference_patch.py
       - scripts/patch_reference_mock_ui.py
       - scripts/patch_reference_app.py
       - .github/workflows/patch-and-test-shiva.yml
@@ -40,6 +41,7 @@ jobs:
 
       - name: Integrate reference layouts
         run: |
+          python scripts/prepare_reference_patch.py
           python scripts/patch_reference_mock_ui.py
           python scripts/patch_reference_app.py
 
