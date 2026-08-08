@@ -19,86 +19,50 @@ from mock_draft_engine import (
     queue_remove,
     roster_slots,
     start_draft,
+    timer_remaining,
     undo_last_pick,
 )
-from player_profile import player_profile_href
+from player_profile import player_link_html
 
 STATE_KEY = "mock_draft_state_v2"
 POOL_KEY = "mock_draft_original_pool_v2"
 
 POS_STYLE = {
-    "QB": ("#d5232b", "#8a1017"),
-    "RB": ("#ff7a00", "#b34400"),
-    "WR": ("#138dd8", "#075688"),
-    "TE": ("#42a92d", "#205f17"),
-    "FLEX": ("#9341d2", "#58217f"),
-    "K": ("#58636e", "#303941"),
+    "QB": ("#d5232b", "#8a1017"), "RB": ("#ff7a00", "#a94300"),
+    "WR": ("#138dd8", "#075688"), "TE": ("#42a92d", "#205f17"),
+    "FLEX": ("#9341d2", "#58217f"), "K": ("#58636e", "#303941"),
     "D/ST": ("#8d5008", "#52300a"),
 }
+
 
 def _css() -> None:
     st.markdown("""
 <style>
-.mock2-title{text-align:center;font-size:26px;font-weight:1000;margin:2px 0 0;letter-spacing:.01em}
-.mock2-sub{text-align:center;font-size:14px;color:#fff;margin:1px 0 8px}
-.mock2-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid #23303a;margin:4px 0 12px}
-.mock2-tab{padding:10px 2px;text-align:center;font-size:12px;font-weight:900;color:#fff;text-decoration:none!important}
-.mock2-tab.active{color:#dfff00;border-bottom:3px solid #dfff00}
-.mock2-filters{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,.9fr) minmax(0,.9fr) 44px;gap:8px;margin:8px 0}
-.mock2-poschips{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;margin:10px 0 10px}
-.mock2-chip{border-radius:7px;text-align:center;padding:8px 1px;font-size:12px;font-weight:1000;color:#fff}
-.mock2-head{display:grid;grid-template-columns:34px minmax(0,1fr) 42px 42px 45px 34px 44px;gap:4px;padding:6px 7px;color:#b7c0c8;font-size:9px;font-weight:900;background:#0a1117;border-radius:8px 8px 0 0}
-.mock2-player-row{display:grid;grid-template-columns:34px minmax(0,1fr) 42px 42px 45px 34px 44px;gap:4px;align-items:center;border-radius:7px;padding:7px 7px;margin:3px 0;border:1px solid rgba(255,255,255,.11);box-shadow:inset 0 1px rgba(255,255,255,.04)}
-.mock2-rank{width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.18);font-size:12px;font-weight:1000}
-.mock2-name{font-size:13px;font-weight:1000;color:#fff!important;text-decoration:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
-.mock2-cell{font-size:11px;font-weight:900;text-align:center;white-space:nowrap}
-.mock2-adp{font-size:11px;font-weight:1000;text-align:right}
-.mock2-q,.mock2-draft{display:flex;align-items:center;justify-content:center;text-decoration:none!important;color:#fff!important;font-size:11px;font-weight:1000;border-radius:6px;height:28px}
-.mock2-q{background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.24)}
-.mock2-q.on{background:#dfff00;color:#071006!important;border-color:#dfff00}
-.mock2-draft{background:#071018;border:1px solid rgba(255,255,255,.28)}
-.mock2-draft.on{background:#dfff00;color:#071006!important;border-color:#dfff00}
-.mock2-onclock{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:#071018;border:1px solid #263b4e;border-radius:11px;padding:10px;margin:10px 0}
-.mock2-clock-label{font-size:12px;color:#fff}.mock2-clock-pick{font-size:16px;color:#dfff00;font-weight:1000}
-.mock2-timer{background:#dfff00;color:#081006;border-radius:7px;padding:8px 11px;font-size:17px;font-weight:1000}
-.mock2-board-wrap{border:1px solid #25313a;border-radius:10px;background:#020609;padding:4px;overflow:hidden}
-.mock2-board{display:grid;gap:2px;width:100%}
-.mock2-teamhead{background:#071018;border:1px solid #26313a;border-radius:4px;padding:5px 1px;font-size:7px;font-weight:1000;text-align:center;overflow:hidden}
-.mock2-boardcell{min-height:53px;border-radius:4px;padding:3px 2px;border:1px solid rgba(255,255,255,.12);overflow:hidden}
-.mock2-pickno{font-size:7px;color:#fff9}.mock2-boardname{font-size:7px;font-weight:1000;line-height:1.12;color:#fff!important;text-decoration:none!important;display:block;margin-top:2px;overflow-wrap:anywhere}
-.mock2-boardpos{font-size:7px;color:#fff;margin-top:2px;text-align:center;font-weight:900}
-.mock2-section{font-size:17px;font-weight:1000;margin:13px 0 8px}
-.mock2-roster-row{display:grid;grid-template-columns:45px 1fr;gap:8px;padding:10px;border-bottom:1px solid #24303a}
-.mock2-slot{color:#dfff00;font-weight:1000;font-size:12px}.mock2-roster-player{font-size:14px;font-weight:900;color:#fff!important;text-decoration:none!important}
-.mock2-shiva{background:linear-gradient(135deg,#08334e,#061a2a);border:1px solid #1272aa;border-radius:13px;padding:12px;margin:10px 0}
-.mock2-shiva-title{font-size:12px;color:#6ed4ff;font-weight:1000}.mock2-shiva-answer{font-size:19px;font-weight:1000;color:#dfff00;margin-top:6px}
-@media(max-width:430px){
-  .mock2-title{font-size:24px}.mock2-poschips{gap:4px}.mock2-chip{padding:7px 1px;font-size:10px}
-  .mock2-head,.mock2-player-row{grid-template-columns:31px minmax(0,1fr) 34px 34px 38px 31px 39px;gap:2px;padding-left:4px;padding-right:4px}
-  .mock2-name{font-size:12px}.mock2-cell,.mock2-adp{font-size:9px}.mock2-rank{width:24px;height:24px;font-size:11px}.mock2-q,.mock2-draft{font-size:9px;height:25px}
-  .mock2-boardcell{min-height:48px}.mock2-boardname{font-size:6.5px}.mock2-teamhead{font-size:6.5px}
-}
+.mock-head{display:grid;grid-template-columns:34px 1fr 34px;align-items:start;margin:0 0 3px}.mock-head a{color:#fff!important;text-decoration:none!important;font-size:30px;line-height:1}.mock-title{text-align:center;font-size:22px;font-weight:1000;line-height:1}.mock-sub{text-align:center;font-size:12px;color:#fff;margin-top:4px}.mock-gear{text-align:right;font-size:22px}.mock-tabs{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #27323b;margin:5px 0 8px}.mock-tab{text-align:center;color:#fff!important;text-decoration:none!important;font-size:10px;font-weight:900;padding:10px 1px}.mock-tab.active{color:#dfff00!important;border-bottom:2px solid #dfff00}.draft-view-toggle{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:5px 0 8px}.draft-view{background:#09141d;border:1px solid #203646;border-radius:7px;text-align:center;padding:6px;color:#cbd3da!important;text-decoration:none!important;font-size:9px;font-weight:900}.draft-view.active{background:#102436;color:#fff!important;border-color:#228ed1}.mock-filter-button{height:38px;border-radius:7px;background:#08141e;border:1px solid #1d3446;display:flex;align-items:center;justify-content:center;font-size:18px}.mock-poschips{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:7px 0 8px}.mock-chip{border-radius:6px;text-align:center;padding:6px 1px;font-size:10px;font-weight:1000;color:#fff}.mock-list-head{display:grid;grid-template-columns:31px minmax(0,1fr) 32px 34px 38px 28px 38px;gap:2px;padding:5px;color:#c4cbd2;font-size:8px;font-weight:900;background:#091017;border-radius:6px 6px 0 0}.mock-player{display:grid;grid-template-columns:31px minmax(0,1fr) 32px 34px 38px 28px 38px;gap:2px;align-items:center;border-radius:6px;padding:5px;margin:2px 0;border:1px solid rgba(255,255,255,.10)}.mock-rank{width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.18);font-size:10px;font-weight:1000}.mock-name{font-size:11px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.mock-cell{font-size:8.5px;font-weight:900;text-align:center;white-space:nowrap}.mock-adp{font-size:8.5px;font-weight:1000;text-align:right}.mock-q,.mock-pick{height:23px;border-radius:5px;display:flex;align-items:center;justify-content:center;text-decoration:none!important;font-size:8px;font-weight:1000}.mock-q{color:#fff!important;background:rgba(0,0,0,.20);border:1px solid rgba(255,255,255,.20)}.mock-q.on,.mock-pick.on{background:#dfff00;color:#061006!important;border:1px solid #dfff00}.mock-pick{color:#b8c0c7!important;background:#071018;border:1px solid rgba(255,255,255,.20)}.draft-status{position:fixed;left:50%;bottom:67px;transform:translateX(-50%);width:min(500px,calc(100vw - 20px));z-index:9998;display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;background:#050b10;border:1px solid #25394a;border-radius:9px;padding:8px 9px;box-shadow:0 -5px 20px rgba(0,0,0,.42)}.clock-label{font-size:10px}.clock-pick{font-size:13px;font-weight:1000;color:#dfff00}.clock-team{font-size:11px;font-weight:900}.clock-timer{background:#dfff00;color:#061006;border-radius:6px;padding:6px 8px;font-size:14px;font-weight:1000}.board-top{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin:3px 0 4px}.board-title{text-align:center;font-size:17px;font-weight:1000}.board-round{text-align:center;font-size:9px;color:#fff}.board-meta{text-align:right;font-size:8px}.board-legend{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;margin:4px 0 7px;font-size:7px;font-weight:900}.legend-dot{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:2px}.board-wrap{background:#020609;border:1px solid #1c2b36;border-radius:7px;padding:3px;overflow:hidden}.draft-board{display:grid;gap:2px;width:100%}.team-head{background:#071018;border:1px solid #26313a;border-radius:3px;padding:4px 0;font-size:6px;font-weight:1000;text-align:center;overflow:hidden}.pick-card{min-height:45px;border-radius:3px;padding:2px 1px;border:1px solid rgba(255,255,255,.12);overflow:hidden}.pick-no{font-size:6px;color:#fff9}.pick-name{font-size:6px!important;font-weight:1000!important;color:#fff!important;text-decoration:none!important;display:block;line-height:1.05;overflow-wrap:anywhere}.pick-pos{font-size:6px;text-align:center;font-weight:900;margin-top:2px}.queue-row,.team-row,.result-row{display:grid;grid-template-columns:45px 1fr 40px;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #1d2a34}.slot{color:#dfff00;font-size:10px;font-weight:1000}.section-title{font-size:14px;font-weight:1000;margin:10px 0 5px}.mock-name-plain{font-size:12px!important;font-weight:900!important;color:#fff!important;text-decoration:none!important}.mock-spacer{height:68px}
+@media(max-width:390px){.mock-player,.mock-list-head{grid-template-columns:29px minmax(0,1fr) 29px 31px 34px 26px 35px}.mock-name{font-size:10px!important}.mock-cell,.mock-adp{font-size:7.5px}.mock-poschips{gap:3px}.mock-chip{font-size:9px}.pick-card{min-height:41px}.pick-name{font-size:5.5px!important}.team-head{font-size:5.5px}}
 </style>
 """, unsafe_allow_html=True)
+
 
 def _state() -> dict[str, Any] | None:
     return st.session_state.get(STATE_KEY)
 
-def _position_color(pos: str) -> tuple[str, str]:
+
+def _colors(pos: str) -> tuple[str, str]:
     return POS_STYLE.get(str(pos).upper(), ("#52606c", "#29313a"))
 
-def _player_href(name: str) -> str:
-    return html.escape(player_profile_href(name), quote=True)
 
-def _handle_query_actions(state: dict[str, Any]) -> None:
+def _return_query(view: str) -> str:
+    return f"draft_tab=DRAFT_BOARD&draft_view={view}"
+
+
+def _handle_actions(state: dict[str, Any]) -> None:
     qid = st.query_params.get("queue")
     did = st.query_params.get("draft")
     if qid:
         pid = str(qid)
-        if pid in list(state.get("queue") or []):
-            queue_remove(state, pid)
-        else:
-            queue_add(state, pid)
+        if pid in state.get("queue", []): queue_remove(state, pid)
+        else: queue_add(state, pid)
         del st.query_params["queue"]
         st.rerun()
     if did:
@@ -111,122 +75,117 @@ def _handle_query_actions(state: dict[str, Any]) -> None:
         del st.query_params["draft"]
         st.rerun()
 
+
+def _position_chips() -> None:
+    bits = []
+    for pos in ("QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"):
+        c1, c2 = _colors(pos)
+        label = "DEF" if pos == "D/ST" else pos
+        bits.append(f'<div class="mock-chip" style="background:linear-gradient(135deg,{c1},{c2})">{label}</div>')
+    st.markdown('<div class="mock-poschips">' + ''.join(bits) + '</div>', unsafe_allow_html=True)
+
+
+def _status_bar(state: dict[str, Any]) -> None:
+    if state.get("status") != "active": return
+    overall = int(state.get("currentOverallPick", 1)); teams = int(state["settings"]["teamsCount"])
+    rnd = int(state.get("currentRound", 1)); pick_in_round = (overall - 1) % teams + 1
+    remaining = timer_remaining(state); mins, secs = divmod(max(0, remaining), 60)
+    team_num = int(str(state.get("currentTeam", "t1")).lstrip("t") or 1)
+    label = "You're on the clock!" if state.get("currentTeam") == state.get("userTeamId") else "Draft in progress"
+    st.markdown(f'<div class="draft-status"><div><div class="clock-label">{label}</div><div class="clock-pick">Pick {rnd}.{pick_in_round:02d}</div></div><div class="clock-team">Team {team_num}</div><div class="clock-timer">{mins:02d}:{secs:02d}</div></div><div class="mock-spacer"></div>', unsafe_allow_html=True)
+
+
 def _run_shiva(state, history, roi, rankings, weekly, ask_shiva_func, api_key):
     if not api_key:
-        st.warning("Ask Shiva requires the configured OpenAI API key.")
-        return
+        st.warning("Ask Shiva requires the configured OpenAI API key."); return
     with st.spinner("Shiva is reading your roster and the live board..."):
-        st.session_state["mock2_shiva_answer"] = ask_shiva_func(
-            question="Who should I pick right now?",
-            history=history, roi=roi, rankings=rankings, weekly=weekly, api_key=api_key,
-            draft_context=full_draft_context(state),
-        )
+        st.session_state["mock2_shiva_answer"] = ask_shiva_func(question="Who should I pick right now?", history=history, roi=roi, rankings=rankings, weekly=weekly, api_key=api_key, draft_context=full_draft_context(state))
         st.session_state["mock2_shiva_pick"] = int(state["currentOverallPick"])
 
-def _render_player_list(state, history, roi, rankings, weekly, ask_shiva_func, api_key):
-    c1, c2, c3 = st.columns([1.4, .85, .85])
-    with c1:
-        search = st.text_input("Search players", placeholder="⌕  Search players...", key="mock2_search", label_visibility="collapsed")
-    with c2:
-        pos = st.selectbox("Position", ["ALL","QB","RB","WR","TE","D/ST","K"], key="mock2_pos", label_visibility="collapsed")
-    with c3:
-        team_filter = st.selectbox("Team", ["ALL"] + sorted({str(p.get("team")) for p in state.get("availablePlayers",[]) if p.get("team")}), key="mock2_team", label_visibility="collapsed")
 
-    chips=[]
-    for p in ["QB","RB","WR","TE","FLEX","K","D/ST"]:
-        c1c,c2c=_position_color(p); label="DEF" if p=="D/ST" else p
-        chips.append(f'<div class="mock2-chip" style="background:linear-gradient(135deg,{c1c},{c2c})">{label}</div>')
-    st.markdown('<div class="mock2-poschips">'+''.join(chips)+'</div>', unsafe_allow_html=True)
-
-    pool=list(state.get("availablePlayers") or [])
-    if search.strip():
-        pool=[p for p in pool if search.strip().casefold() in str(p.get("name","")).casefold()]
-    if pos!="ALL":
-        pool=[p for p in pool if p.get("position")==pos]
-    if team_filter!="ALL":
-        pool=[p for p in pool if str(p.get("team"))==team_filter]
-    pool=sorted(pool,key=lambda p:(p.get("rank",9999),p.get("adp",9999),p.get("name","")))[:120]
-
-    st.markdown('<div class="mock2-head"><div>RK</div><div>PLAYER</div><div>POS</div><div>TEAM</div><div style="text-align:right">ADP</div><div>Q</div><div></div></div>', unsafe_allow_html=True)
-    on_clock = state.get("status")=="active" and not state.get("paused") and state.get("currentTeam")==state.get("userTeamId")
-    queued=set(state.get("queue") or [])
+def _player_list(state, history, roi, rankings, weekly, ask_shiva_func, api_key):
+    c1, c2, c3, c4 = st.columns([1.45, .9, .9, .35], gap="small")
+    with c1: search = st.text_input("Search", placeholder="⌕ Search players...", key="mock2_search", label_visibility="collapsed")
+    with c2: pos = st.selectbox("Position", ["ALL", "QB", "RB", "WR", "TE", "D/ST", "K"], key="mock2_pos", label_visibility="collapsed", format_func=lambda x: "All Positions" if x == "ALL" else x)
+    teams = ["ALL"] + sorted({str(p.get("team")) for p in state.get("availablePlayers", []) if p.get("team")})
+    with c3: team_filter = st.selectbox("Team", teams, key="mock2_team", label_visibility="collapsed", format_func=lambda x: "All Teams" if x == "ALL" else x)
+    with c4: st.markdown('<div class="mock-filter-button">▽</div>', unsafe_allow_html=True)
+    _position_chips()
+    pool = list(state.get("availablePlayers") or [])
+    if search.strip(): pool = [p for p in pool if search.strip().casefold() in str(p.get("name", "")).casefold()]
+    if pos != "ALL": pool = [p for p in pool if p.get("position") == pos]
+    if team_filter != "ALL": pool = [p for p in pool if str(p.get("team")) == team_filter]
+    pool = sorted(pool, key=lambda p: (p.get("rank", 9999), p.get("adp", 9999), p.get("name", "")))[:140]
+    st.markdown('<div class="mock-list-head"><div>RK</div><div>PLAYER</div><div>POS</div><div>TEAM</div><div style="text-align:right">ADP</div><div>Q</div><div></div></div>', unsafe_allow_html=True)
+    on_clock = state.get("status") == "active" and not state.get("paused") and state.get("currentTeam") == state.get("userTeamId")
+    queued = set(state.get("queue") or []); return_q = _return_query("LIST")
     for p in pool:
-        c1c,c2c=_position_color(str(p.get("position")))
-        pid=str(p["id"]); name=html.escape(str(p.get("name"))); team=html.escape(str(p.get("team") or "—"))
-        adp=float(p.get("adp") or 0); rank=int(p.get("rank") or 0); pos_txt=html.escape(str(p.get("position") or "—"))
-        q_href=f'?page=Mock%20Draft&queue={quote(pid)}'
-        q_cls='mock2-q on' if pid in queued else 'mock2-q'
-        if on_clock:
-            d_href=f'?page=Mock%20Draft&draft={quote(pid)}'; d_html=f'<a class="mock2-draft on" href="{d_href}" target="_self">PICK</a>'
-        else:
-            d_html='<span class="mock2-draft">PICK</span>'
-        st.markdown(
-            f'<div class="mock2-player-row" style="background:linear-gradient(90deg,{c2c},{c1c})">'
-            f'<div class="mock2-rank">{rank}</div>'
-            f'<div><a class="mock2-name" href="{_player_href(str(p.get("name")))}" target="_self">{name}</a></div>'
-            f'<div class="mock2-cell">{pos_txt}</div><div class="mock2-cell">{team}</div><div class="mock2-adp">{adp:.1f}</div>'
-            f'<a class="{q_cls}" href="{q_href}" target="_self">Q</a>{d_html}</div>',
-            unsafe_allow_html=True
-        )
+        c1c, c2c = _colors(str(p.get("position"))); pid = str(p["id"]); name = str(p.get("name")); team = html.escape(str(p.get("team") or "—")); pos_txt = html.escape(str(p.get("position") or "—")); adp = float(p.get("adp") or 0); rank = int(p.get("rank") or 0)
+        link = player_link_html(pid, name, css_class="mock-name", return_page="Mock Draft", return_query=return_q)
+        q_cls = "mock-q on" if pid in queued else "mock-q"; q_href = f'?page=Mock%20Draft&draft_tab=DRAFT_BOARD&draft_view=LIST&queue={quote(pid)}'
+        pick = f'<a class="mock-pick on" href="?page=Mock%20Draft&draft_tab=DRAFT_BOARD&draft_view=LIST&draft={quote(pid)}" target="_self">PICK</a>' if on_clock else '<span class="mock-pick">PICK</span>'
+        st.markdown(f'<div class="mock-player" style="background:linear-gradient(90deg,{c2c},{c1c})"><div class="mock-rank">{rank}</div><div>{link}</div><div class="mock-cell">{pos_txt}</div><div class="mock-cell">{team}</div><div class="mock-adp">{adp:.1f}</div><a class="{q_cls}" href="{q_href}" target="_self">Q</a>{pick}</div>', unsafe_allow_html=True)
+    if on_clock and st.button("🤖 WHO SHOULD I PICK?", key="mock2_shiva_btn", use_container_width=True, type="primary"): _run_shiva(state, history, roi, rankings, weekly, ask_shiva_func, api_key)
+    ans = st.session_state.get("mock2_shiva_answer")
+    if ans and st.session_state.get("mock2_shiva_pick") == int(state.get("currentOverallPick", 0)):
+        st.markdown(f'<div style="background:#072237;border:1px solid #126b9d;border-radius:9px;padding:9px;margin-top:7px"><div style="font-size:9px;color:#5ad0ff;font-weight:1000">ASK SHIVA GPT</div><div style="font-size:16px;color:#dfff00;font-weight:1000;margin-top:4px">{html.escape(str(ans.get("answer") or ""))}</div><div style="font-size:10px;margin-top:3px">{html.escape(str(ans.get("why") or ""))}</div></div>', unsafe_allow_html=True)
 
-    if on_clock:
-        pick_num=((int(state.get("currentOverallPick",1))-1)%int(state["settings"]["teamsCount"]))+1
-        st.markdown(f'<div class="mock2-onclock"><div><div class="mock2-clock-label">You’re on the clock!</div><div class="mock2-clock-pick">Pick {state.get("currentRound")}.{pick_num:02d}</div></div><div style="font-size:14px;font-weight:900">Team {state.get("userTeamId")}</div><div class="mock2-timer">01:30</div></div>', unsafe_allow_html=True)
-        if st.button("🤖 WHO SHOULD I PICK?", key="mock2_shiva_btn", use_container_width=True, type="primary"):
-            _run_shiva(state, history, roi, rankings, weekly, ask_shiva_func, api_key)
-    ans=st.session_state.get("mock2_shiva_answer")
-    if ans and st.session_state.get("mock2_shiva_pick")==int(state.get("currentOverallPick",0)):
-        st.markdown(f'<div class="mock2-shiva"><div class="mock2-shiva-title">ASK SHIVA GPT</div><div class="mock2-shiva-answer">{html.escape(str(ans.get("answer") or ""))}</div><div style="font-size:13px;color:#d4e0e8;margin-top:6px">{html.escape(str(ans.get("why") or ""))}</div></div>', unsafe_allow_html=True)
 
-def _render_board(state):
-    teams_count=int(state["settings"]["teamsCount"]); rounds=int(state["settings"]["rounds"])
-    picks={int(p["pickNumber"]):p for p in state.get("picks",[])}
-    parts=[f'<div class="mock2-board" style="grid-template-columns:repeat({teams_count},minmax(0,1fr))">']
-    for t in state["teams"]:
-        parts.append(f'<div class="mock2-teamhead">{html.escape(t["name"])}</div>')
+def _compact_name(name: str) -> str:
+    parts = str(name).replace("'", "").split()
+    if not parts: return "—"
+    if len(parts) == 1: return parts[0][:9]
+    return f"{parts[0][0]}.{parts[-1]}"[:10]
+
+
+def _board(state: dict[str, Any]) -> None:
+    teams_count = int(state["settings"]["teamsCount"]); rounds = int(state["settings"]["rounds"]); current_round = int(state.get("currentRound", 1))
+    st.markdown(f'<div class="board-top"><div></div><div><div class="board-title">MOCK DRAFT BOARD</div><div class="board-round">Round {current_round}⌄</div></div><div class="board-meta">{teams_count} Teams • {html.escape(str(state["settings"].get("scoring", "PPR")))}</div></div>', unsafe_allow_html=True)
+    legend=[]
+    for pos in ("QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"):
+        c1,_=_colors(pos); label="DEF" if pos=="D/ST" else pos; legend.append(f'<span><i class="legend-dot" style="background:{c1}"></i>{label}</span>')
+    st.markdown('<div class="board-legend">'+''.join(legend)+'</div>', unsafe_allow_html=True)
+    picks={int(p["pickNumber"]):p for p in state.get("picks",[])}; parts=[f'<div class="draft-board" style="grid-template-columns:repeat({teams_count},minmax(0,1fr))">']
+    for i in range(1,teams_count+1): parts.append(f'<div class="team-head">TEAM {i}</div>')
     for rnd in range(1,rounds+1):
-        for team_number in range(1,teams_count+1):
-            overall=(rnd-1)*teams_count+(team_number if rnd%2 else teams_count-team_number+1)
-            pick=picks.get(overall)
+        for team_column in range(1,teams_count+1):
+            overall=(rnd-1)*teams_count+(team_column if rnd%2 else teams_count-team_column+1); pick=picks.get(overall); round_pick=(overall-1)%teams_count+1
             if pick:
-                c1c,c2c=_position_color(pick.get("position")); pname=str(pick.get("playerName")); href=_player_href(pname)
-                parts.append(f'<div class="mock2-boardcell" style="background:linear-gradient(145deg,{c1c},{c2c})"><div class="mock2-pickno">{overall}.</div><a class="mock2-boardname" href="{href}" target="_self">{html.escape(pname)}</a><div class="mock2-boardpos">{html.escape(str(pick.get("position")))}</div></div>')
-            else:
-                parts.append(f'<div class="mock2-boardcell" style="background:#081018"><div class="mock2-pickno">{overall}.</div></div>')
-    parts.append('</div>')
-    st.markdown('<div class="mock2-board-wrap">'+''.join(parts)+'</div>', unsafe_allow_html=True)
+                c1c,c2c=_colors(str(pick.get("position"))); pid=str(pick.get("playerId")); pname=str(pick.get("playerName")); pos=str(pick.get("position")); link=player_link_html(pid,_compact_name(pname),css_class="pick-name",return_page="Mock Draft",return_query=_return_query("BOARD")); parts.append(f'<div class="pick-card" style="background:linear-gradient(145deg,{c1c},{c2c})"><div class="pick-no">{rnd}.{round_pick}</div>{link}<div class="pick-pos">{html.escape(pos)}</div></div>')
+            else: parts.append(f'<div class="pick-card" style="background:#071018"><div class="pick-no">{rnd}.{round_pick}</div></div>')
+    parts.append('</div>'); st.markdown('<div class="board-wrap">'+''.join(parts)+'</div>', unsafe_allow_html=True)
 
-def _render_queue(state):
-    st.markdown('<div class="mock2-section">QUEUE</div>', unsafe_allow_html=True)
+
+def _queue(state: dict[str, Any]) -> None:
+    st.markdown('<div class="section-title">QUEUE</div>', unsafe_allow_html=True)
     if not state.get("queue"): st.info("Your draft queue is empty.")
     for pid in list(state.get("queue") or []):
         p=get_player(state,pid)
         if not p: continue
-        c1c,c2c=_position_color(p.get("position"))
-        st.markdown(f'<div class="mock2-player-row" style="grid-template-columns:minmax(0,1fr) 44px;background:linear-gradient(90deg,{c2c},{c1c})"><a class="mock2-name" href="{_player_href(p["name"])}" target="_self">{html.escape(p["name"])}</a><a class="mock2-q on" href="?page=Mock%20Draft&queue={quote(str(pid))}" target="_self">×</a></div>', unsafe_allow_html=True)
+        link=player_link_html(str(p["id"]),str(p["name"]),css_class="mock-name-plain",return_page="Mock Draft",return_query="draft_tab=QUEUE"); st.markdown(f'<div class="queue-row"><div class="slot">{html.escape(str(p.get("position")))}</div><div>{link}</div><a class="mock-q on" href="?page=Mock%20Draft&draft_tab=QUEUE&queue={quote(str(pid))}" target="_self">×</a></div>', unsafe_allow_html=True)
 
-def _render_team(state):
-    st.markdown('<div class="mock2-section">MY TEAM</div>', unsafe_allow_html=True)
+
+def _team(state: dict[str, Any]) -> None:
+    st.markdown('<div class="section-title">MY TEAM</div>', unsafe_allow_html=True)
     for slot,player in roster_slots(state,state["userTeamId"]):
-        if player:
-            body=f'<a class="mock2-roster-player" href="{_player_href(player["name"])}" target="_self">{html.escape(player["name"])}</a> <span style="color:#9eabb5">· {html.escape(player["position"])}</span>'
-        else:
-            body='<span style="color:#75808a">—</span>'
-        st.markdown(f'<div class="mock2-roster-row"><div class="mock2-slot">{html.escape(slot)}</div><div>{body}</div></div>', unsafe_allow_html=True)
+        body=player_link_html(str(player["id"]),str(player["name"]),css_class="mock-name-plain",return_page="Mock Draft",return_query="draft_tab=TEAM") if player else '<span style="color:#75808a">—</span>'; pos=html.escape(str(player.get("position"))) if player else ""; st.markdown(f'<div class="team-row"><div class="slot">{html.escape(slot)}</div><div>{body}</div><div class="mock-cell">{pos}</div></div>', unsafe_allow_html=True)
+
+
+def _results(state: dict[str, Any]) -> None:
+    st.markdown('<div class="section-title">DRAFT RESULTS</div>', unsafe_allow_html=True)
+    if not state.get("picks"): st.info("No picks have been made yet.")
+    for pick in state.get("picks",[]):
+        link=player_link_html(str(pick.get("playerId")),str(pick.get("playerName")),css_class="mock-name-plain",return_page="Mock Draft",return_query="draft_tab=RESULTS"); st.markdown(f'<div class="result-row"><div class="slot">{int(pick.get("round",0))}.{((int(pick.get("pickNumber",1))-1)%int(state["settings"]["teamsCount"]))+1:02d}</div><div>{link}</div><div class="mock-cell">{html.escape(str(pick.get("position")))}</div></div>', unsafe_allow_html=True)
+
 
 def render_mock_draft_room_v2(rankings: pd.DataFrame, weekly: pd.DataFrame, history: pd.DataFrame, roi: pd.DataFrame, db_path, ask_shiva_func, api_key: str | None) -> None:
-    _css()
-    st.markdown('<div class="mock2-title">MOCK DRAFT</div><div class="mock2-sub">10-Team PPR • Snake Draft</div>', unsafe_allow_html=True)
-
-    if POOL_KEY not in st.session_state:
-        st.session_state[POOL_KEY]=build_player_pool(rankings,weekly)
+    _css(); st.markdown('<div class="mock-head"><a href="?page=Home" target="_self">‹</a><div><div class="mock-title">MOCK DRAFT</div><div class="mock-sub">10-Team PPR • Snake Draft</div></div><div class="mock-gear">⚙</div></div>', unsafe_allow_html=True)
+    if POOL_KEY not in st.session_state: st.session_state[POOL_KEY]=build_player_pool(rankings,weekly)
     pool=st.session_state[POOL_KEY]
-    if not pool:
-        st.error("No verified 2026 ranking rows are available for the mock draft."); return
-
+    if not pool: st.error("No verified 2026 ranking rows are available for the mock draft."); return
     state=_state()
     if state is None:
-        st.markdown('<div class="mock2-section">CREATE MOCK DRAFT</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">CREATE MOCK DRAFT</div>', unsafe_allow_html=True)
         with st.form("mock2_setup"):
             c1,c2=st.columns(2)
             with c1: teams=st.selectbox("Teams",[8,10,12],index=1)
@@ -235,30 +194,20 @@ def render_mock_draft_room_v2(rankings: pd.DataFrame, weekly: pd.DataFrame, hist
             with c3: scoring=st.selectbox("Scoring",["PPR","Half PPR","Standard"],index=0)
             with c4: rounds=st.number_input("Rounds",10,20,sum(DEFAULT_ROSTER.values()),1)
             if st.form_submit_button("START MOCK DRAFT",use_container_width=True,type="primary"):
-                state=initialize_draft(pool,int(teams),int(slot),scoring,DEFAULT_ROSTER.copy(),int(rounds),90)
-                start_draft(state); advance_cpu_until_user(state); st.session_state[STATE_KEY]=state; st.rerun()
+                state=initialize_draft(pool,int(teams),int(slot),scoring,DEFAULT_ROSTER.copy(),int(rounds),90); start_draft(state); advance_cpu_until_user(state); st.session_state[STATE_KEY]=state; st.rerun()
         return
-
-    if state.get("status")=="active" and not state.get("paused") and state.get("currentTeam")!=state.get("userTeamId"):
-        advance_cpu_until_user(state)
-    st.session_state[STATE_KEY]=state
-    _handle_query_actions(state)
-
-    tab=str(st.query_params.get("draft_tab") or st.session_state.get("mock2_tab","PLAYERS")).upper()
-    if tab not in {"PLAYERS","BOARD","QUEUE","TEAM"}: tab="PLAYERS"
-    st.session_state["mock2_tab"]=tab
-    labels=[("BOARD","DRAFT BOARD"),("QUEUE","QUEUE"),("TEAM","TEAM"),("PLAYERS","PLAYERS")]
-    st.markdown('<div class="mock2-tabs">'+''.join(f'<a class="mock2-tab{" active" if tab==key else ""}" href="?page=Mock%20Draft&draft_tab={key}" target="_self">{label}</a>' for key,label in labels)+'</div>', unsafe_allow_html=True)
-
-    c1,c2=st.columns(2)
-    with c1:
-        if st.button("↶ UNDO PICK",key="mock2_undo",use_container_width=True,disabled=not state.get("picks")):
-            undo_last_pick(state); st.rerun()
-    with c2:
-        if st.button("HOME",key="mock2_home",use_container_width=True):
-            st.session_state["page"]="Home"; st.query_params.clear(); st.rerun()
-
-    if tab=="PLAYERS": _render_player_list(state,history,roi,rankings,weekly,ask_shiva_func,api_key)
-    elif tab=="BOARD": _render_board(state)
-    elif tab=="QUEUE": _render_queue(state)
-    else: _render_team(state)
+    if state.get("status")=="active" and not state.get("paused") and state.get("currentTeam")!=state.get("userTeamId"): advance_cpu_until_user(state)
+    st.session_state[STATE_KEY]=state; _handle_actions(state)
+    tab=str(st.query_params.get("draft_tab") or st.session_state.get("mock2_tab","DRAFT_BOARD")).upper()
+    if tab not in {"DRAFT_BOARD","QUEUE","TEAM","RESULTS"}: tab="DRAFT_BOARD"
+    st.session_state["mock2_tab"]=tab; labels=(("DRAFT_BOARD","DRAFT BOARD"),("QUEUE","QUEUE"),("TEAM","TEAM"),("RESULTS","RESULTS")); st.markdown('<div class="mock-tabs">'+''.join(f'<a class="mock-tab{" active" if tab==key else ""}" href="?page=Mock%20Draft&draft_tab={key}" target="_self">{label}</a>' for key,label in labels)+'</div>', unsafe_allow_html=True)
+    if tab=="DRAFT_BOARD":
+        view=str(st.query_params.get("draft_view") or st.session_state.get("mock2_view","LIST")).upper()
+        if view not in {"LIST","BOARD"}: view="LIST"
+        st.session_state["mock2_view"]=view; st.markdown('<div class="draft-view-toggle"><a class="draft-view'+(' active' if view=='LIST' else '')+'" href="?page=Mock%20Draft&draft_tab=DRAFT_BOARD&draft_view=LIST" target="_self">PLAYER LIST</a><a class="draft-view'+(' active' if view=='BOARD' else '')+'" href="?page=Mock%20Draft&draft_tab=DRAFT_BOARD&draft_view=BOARD" target="_self">BOARD VIEW</a></div>', unsafe_allow_html=True)
+        if view=="LIST": _player_list(state,history,roi,rankings,weekly,ask_shiva_func,api_key)
+        else: _board(state)
+    elif tab=="QUEUE": _queue(state)
+    elif tab=="TEAM": _team(state)
+    else: _results(state)
+    _status_bar(state)
