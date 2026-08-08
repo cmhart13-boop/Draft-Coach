@@ -1,0 +1,13 @@
+name: Shiva Validate
+on:
+  push:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m py_compile app.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py shiva_chatgpt_service.py shiva_engine.py
