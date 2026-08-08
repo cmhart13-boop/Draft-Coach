@@ -35,11 +35,16 @@ if not st.session_state.get("_shiva_splash_seen", False):
         """,
         unsafe_allow_html=True,
     )
-    st.image(Path("assets/shiva_splash.jpg"), use_container_width=True)
-    time.sleep(2.5)
-    st.session_state["_shiva_splash_seen"] = True
-    st.session_state["page"] = "Home"
-    st.rerun()
+    try:
+        st.image(Path("assets/shiva_splash.jpg"), use_container_width=True)
+        time.sleep(2.5)
+        st.session_state["_shiva_splash_seen"] = True
+        st.session_state["page"] = "Home"
+        st.rerun()
+    except Exception:
+        # Never let a bad/missing splash asset take down the entire app.
+        st.session_state["_shiva_splash_seen"] = True
+        st.session_state.setdefault("page", "Home")
 
 _original_set_page_config = st.set_page_config
 st.set_page_config = lambda *args, **kwargs: None
