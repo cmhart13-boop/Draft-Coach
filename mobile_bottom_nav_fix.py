@@ -4,7 +4,7 @@ import streamlit as st
 
 
 def apply_mobile_bottom_nav_fix() -> None:
-    """Force the app's existing stateful bottom navigation into a native-style mobile row."""
+    """Force the app's existing stateful navigation and home actions into native-style mobile layouts."""
     st.markdown(
         r"""
 <style>
@@ -72,6 +72,8 @@ def apply_mobile_bottom_nav_fix() -> None:
     box-shadow: none !important;
     color: #c8cdd5 !important;
     overflow: hidden !important;
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 .st-key-app_bottom_nav button[kind="primary"] {
@@ -139,6 +141,47 @@ def apply_mobile_bottom_nav_fix() -> None:
 [data-testid="stAppViewBlockContainer"],
 .block-container {
     padding-bottom: 112px !important;
+}
+
+/*
+   Streamlit stacks st.columns vertically on narrow phones. The six primary home
+   actions are meant to behave like a real mobile app launcher, so preserve the
+   existing functional buttons while keeping their parent row two-across.
+*/
+@media (max-width: 520px) {
+    div[data-testid="stHorizontalBlock"]:has(.st-key-home_draft):has(.st-key-home_players) {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+        width: 100% !important;
+        flex-wrap: nowrap !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(.st-key-home_draft):has(.st-key-home_players) > div[data-testid="stColumn"] {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: none !important;
+        padding: 0 !important;
+    }
+
+    .st-key-home_draft button,
+    .st-key-home_players button,
+    .st-key-home_team button,
+    .st-key-home_sleepers button,
+    .st-key-home_cheats button,
+    .st-key-home_shiva button {
+        width: 100% !important;
+        min-height: 94px !important;
+        height: 94px !important;
+        padding: 8px 5px !important;
+        margin-bottom: 10px !important;
+        font-size: 14px !important;
+        line-height: 1.2 !important;
+        touch-action: manipulation !important;
+        -webkit-tap-highlight-color: transparent !important;
+    }
 }
 
 @media (max-width: 430px) {
