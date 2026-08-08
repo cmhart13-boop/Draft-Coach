@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image, UnidentifiedImageError
 
 st.set_page_config(
     page_title="Shiva Intelligence",
@@ -14,6 +15,21 @@ from shiva_app_v2 import run
 from streamlit_branding_fix import hide_streamlit_branding
 
 hide_streamlit_branding()
+
+APP_ROOT = Path(__file__).resolve().parent
+SPLASH_PATH = APP_ROOT / "assets" / "shiva_splash.jpg"
+
+
+def valid_local_image(path: Path) -> bool:
+    if not path.is_file() or path.stat().st_size <= 0:
+        return False
+    try:
+        with Image.open(path) as img:
+            img.verify()
+        return True
+    except (UnidentifiedImageError, OSError, ValueError):
+        return False
+
 
 if not st.session_state.get("_shiva_splash_seen", False):
     st.markdown(
@@ -35,16 +51,16 @@ if not st.session_state.get("_shiva_splash_seen", False):
         """,
         unsafe_allow_html=True,
     )
-    try:
-        st.image(Path("assets/shiva_splash.jpg"), use_container_width=True)
-        time.sleep(2.5)
-        st.session_state["_shiva_splash_seen"] = True
-        st.session_state["page"] = "Home"
-        st.rerun()
-    except Exception:
-        # Never let a bad/missing splash asset take down the entire app.
-        st.session_state["_shiva_splash_seen"] = True
-        st.session_state.setdefault("page", "Home")
+    if valid_local_image(SPLASH_PATH):
+        try:
+            st.image(str(SPLASH_PATH), use_container_width=True)
+            time.sleep(2.5)
+        except (UnidentifiedImageError, OSError, ValueError):
+            pass
+
+    st.session_state["_shiva_splash_seen"] = True
+    st.session_state["page"] = "Home"
+    st.rerun()
 
 _original_set_page_config = st.set_page_config
 st.set_page_config = lambda *args, **kwargs: None
