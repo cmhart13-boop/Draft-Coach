@@ -12,6 +12,7 @@ st.set_page_config(
 )
 
 import shiva_app_v3
+from joel_smyth_ppr import enrich_rankings_with_joel_ppr, render_joel_ppr_panel
 from mobile_bottom_nav_fix import apply_mobile_bottom_nav_fix
 from mock_draft_players_espn import render_mock_draft_room_v2 as render_espn_players_available
 from streamlit_branding_fix import hide_streamlit_branding
@@ -19,6 +20,30 @@ from streamlit_branding_fix import hide_streamlit_branding
 # Keep the existing app shell and mock-draft engine. Only replace the
 # Players Available presentation layer used by the Draft Coach mock room.
 shiva_app_v3.render_mock_draft_room_v2 = render_espn_players_available
+
+# Inject Joel Smyth's 2026 FULL-PPR information into the app's existing ranking
+# dataframe so Player Profiles, Ask Shiva, Mock Draft and Draft Coach can all
+# consume the analyst fields without replacing the app's verified base data.
+_original_load_rankings = shiva_app_v3.load_rankings
+
+
+def _load_rankings_with_joel_ppr():
+    return enrich_rankings_with_joel_ppr(_original_load_rankings())
+
+
+shiva_app_v3.load_rankings = _load_rankings_with_joel_ppr
+
+# Add a dedicated Joel PPR intelligence panel to Draft Coach while preserving
+# every existing Draft Coach feature and live-draft behavior.
+_original_draft_coach = shiva_app_v3._draft_coach
+
+
+def _draft_coach_with_joel_ppr(rankings, weekly):
+    _original_draft_coach(rankings, weekly)
+    render_joel_ppr_panel(rankings, weekly, shiva_app_v3._player_rows)
+
+
+shiva_app_v3._draft_coach = _draft_coach_with_joel_ppr
 run = shiva_app_v3.run
 
 hide_streamlit_branding()
