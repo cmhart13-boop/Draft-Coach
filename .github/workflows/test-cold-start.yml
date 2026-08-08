@@ -31,7 +31,7 @@ jobs:
           at.run(timeout=90)
           assert not at.exception, [str(x) for x in at.exception]
           # A fresh run may rerun once through the splash guard. It must end on Home.
-          assert at.session_state.get('_shiva_splash_seen') is True
-          assert at.session_state.get('page') == 'Home'
+          assert at.session_state['_shiva_splash_seen'] is True
+          assert at.session_state['page'] == 'Home'
           print('Cold start PASS: missing/invalid splash cannot crash the app')
           PY
