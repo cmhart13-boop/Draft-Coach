@@ -69,8 +69,6 @@ jobs:
           from mock_draft_engine import build_player_pool
 
           root = Path('.')
-
-          # Splash is optional at runtime, but if committed it must actually be a valid image.
           splash = root / 'assets' / 'shiva_splash.jpg'
           if splash.exists() and splash.stat().st_size > 0:
               try:
@@ -133,12 +131,10 @@ jobs:
           profile = Path('player_profile.py').read_text()
           config = Path('.streamlit/config.toml').read_text()
 
-          # Production wiring.
           assert 'render_espn_players_available' in app
           assert 'apply_mobile_bottom_nav_fix()' in app
           assert 'valid_local_image' in app and 'Image.open' in app
 
-          # Five-wide, fixed, thumb-friendly mobile navigation.
           assert 'grid-template-columns: repeat(5, minmax(0, 1fr))' in nav
           assert 'position: fixed' in nav and 'bottom: 0' in nav
           assert 'safe-area-inset-bottom' in nav
@@ -147,19 +143,14 @@ jobs:
           assert 'overflow: hidden' in nav
           assert 'padding-bottom: 112px' in nav
 
-          # No Streamlit chrome overlapping the mobile app.
           assert 'stAppDeployButton' in branding and 'viewerBadge' in branding
           assert 'hideTopBar = true' in config and 'toolbarMode = "minimal"' in config
 
-          # Functional stateful nav remains real Streamlit buttons, not dead HTML links.
           assert 'st.container(key="app_bottom_nav")' in shell
           assert 'st.button(label' in shell and '_go(target)' in shell and 'st.rerun()' in shell
-
-          # Home feature buttons all map to real pages.
           for key in ['home_draft','home_team','home_cheats','home_players','home_sleepers','home_shiva']:
               assert key in shell, key
 
-          # ESPN-style Players Available view: flat 6-column mobile table, queue, profiles, filters.
           assert 'grid-template-columns:9% 39% 9% 13% 15% 15%' in mock
           assert 'player-table-header' in mock
           assert 'player-row-even' in mock and 'player-row-odd' in mock
@@ -168,12 +159,10 @@ jobs:
           assert 'mock2_search' in mock and 'mock2_pos' in mock and 'mock2_sort' in mock
           assert 'overflow-x:auto' not in mock
 
-          # Base mock features cannot disappear while skinning Players Available.
           for marker in ['PLAYERS_AVAILABLE','QUEUE','DRAFT_BOARD','ROSTER','timer_remaining','roster_slots','undo_last_pick']:
               assert marker in base_mock, marker
 
-          # Player profiles retain historical year/log structures.
-          for marker in ['profile-years','profile-log','canonical_player_id','fantasy_points_ppr']:
+          for marker in ['.pp-yearselect','.pp-log','canonical_player_id','fantasy_points_ppr','_weekly_table']:
               assert marker in profile, marker
 
           print('Mobile-first presentation contracts passed')
