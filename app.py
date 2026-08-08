@@ -11,6 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+from mobile_nav_override import apply_mobile_nav_override
 from shiva_app_v2 import run
 from streamlit_branding_fix import hide_streamlit_branding
 
@@ -70,3 +71,4 @@ finally:
     st.set_page_config = _original_set_page_config
 
 hide_streamlit_branding()
+apply_mobile_nav_override()
