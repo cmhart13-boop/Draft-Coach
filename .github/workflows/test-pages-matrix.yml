@@ -1,0 +1,51 @@
+name: Test Every App Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - shiva_app_v3.py
+      - .github/workflows/test-pages-matrix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  page-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        page:
+          - Home
+          - Players
+          - League History
+          - Draft Coach
+          - Sleepers
+          - Cheat Sheets
+          - Shiva Intelligence
+          - Mock Draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Render page
+        env:
+          TEST_PAGE: ${{ matrix.page }}
+        run: |
+          python - <<'PY'
+          import os
+          from streamlit.testing.v1 import AppTest
+
+          page = os.environ['TEST_PAGE']
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.session_state['_shiva_splash_seen'] = True
+          at.session_state['page'] = page
+          at.run(timeout=90)
+          assert not at.exception, (page, [str(x) for x in at.exception])
+          print('PASS', page)
+          PY
