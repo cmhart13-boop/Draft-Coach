@@ -3,12 +3,12 @@ from pathlib import Path
 path = Path("scripts/patch_reference_mock_ui.py")
 text = path.read_text()
 
-# Keep \n escapes literal inside the generated Python source.
+# Keep backslash-n escapes literal inside the generated Python source.
 text = text.replace("new_available = '''", "new_available = r'''", 1)
 text = text.replace("new_board = '''", "new_board = r'''", 1)
 
 # re.sub treats backslashes in a string replacement specially. Use callable
-# replacements so generated f-strings retain their literal \\n escape sequences.
+# replacements so generated f-strings retain literal backslash-n sequences.
 replacements = {
     'text = re.sub(r"def _css\\(\\) -> None:.*?\\n\\ndef _state_key\\(\\)", new_css + "\\n\\ndef _state_key()", text, flags=re.S)':
         'text = re.sub(r"def _css\\(\\) -> None:.*?\\n\\ndef _state_key\\(\\)", lambda _m: new_css + "\\n\\ndef _state_key()", text, flags=re.S)',
