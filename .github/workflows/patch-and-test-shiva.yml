@@ -82,19 +82,17 @@ jobs:
           years = sorted(pd.to_numeric(cmc['season'], errors='coerce').dropna().astype(int).unique().tolist(), reverse=True)
           assert years and min(years) <= 2017 and max(years) >= 2025, years
 
-          # Dynamic-year behavior: available years come only from actual rows for each player.
-          sample_name_col = next(c for c in ['player_display_name','player_name','name'] if c in weekly.columns)
-          counts = weekly.groupby(sample_name_col)['season'].nunique().sort_values()
-          one_year_names = counts[counts == 1]
-          assert not one_year_names.empty
-          rookie_name = str(one_year_names.index[0])
-          rookie_id = canonical_player_id(weekly, rookie_name)
-          rookie = _weekly_for_player(weekly, rookie_id, rookie_name)
+          # Dynamic-year behavior is keyed to permanent player_id, not just a name string.
+          # This avoids false matches when two NFL players share the same name.
+          id_years = weekly.dropna(subset=['player_id']).groupby('player_id')['season'].nunique().sort_values()
+          one_year_ids = id_years[id_years == 1]
+          assert not one_year_ids.empty
+          rookie_id = str(one_year_ids.index[0])
+          rookie = weekly.loc[weekly['player_id'].astype(str).eq(rookie_id)].copy()
           rookie_years = pd.to_numeric(rookie['season'], errors='coerce').dropna().astype(int).unique().tolist()
-          assert len(rookie_years) == 1, (rookie_name, rookie_years)
+          assert len(rookie_years) == 1, (rookie_id, rookie_years)
 
-          # Validate ESPN-style Full PPR calculation against loaded PPR points on rows where
-          # the underlying scoring fields required by the app are available.
+          # Validate ESPN-style Full PPR calculation against loaded PPR points.
           check = weekly.copy()
           if 'season_type' in check.columns:
               check = check[check['season_type'].astype(str).str.upper().isin(['REG','REGULAR','REGULAR SEASON'])]
@@ -105,5 +103,5 @@ jobs:
               diff = (calc - actual).abs().dropna()
               assert not diff.empty
               assert float(diff.quantile(.95)) <= 0.11, diff.describe().to_dict()
-          print('Historical years and Full PPR scoring validation passed', years, rookie_name, rookie_years)
+          print('Historical years and Full PPR scoring validation passed', years, rookie_id, rookie_years)
           PY
