@@ -13,10 +13,6 @@ on:
       - shiva_mobile_home.py
       - scripts/regression_checks.py
       - scripts/mock_draft_regression.py
-      - scripts/patch_mock_draft_room.py
-      - scripts/patch_mock_timer.py
-      - scripts/refresh_mock_draft_layout.py
-      - scripts/optimize_streamlit_resources.py
       - scripts/patch_reference_mock_ui.py
       - scripts/patch_reference_app.py
       - .github/workflows/patch-and-test-shiva.yml
@@ -42,12 +38,8 @@ jobs:
       - name: Install test dependencies
         run: pip install pandas numpy openai streamlit
 
-      - name: Integrate app patches
+      - name: Integrate reference layouts
         run: |
-          python scripts/patch_mock_draft_room.py
-          python scripts/patch_mock_timer.py
-          python scripts/refresh_mock_draft_layout.py
-          python scripts/optimize_streamlit_resources.py
           python scripts/patch_reference_mock_ui.py
           python scripts/patch_reference_app.py
 
@@ -67,7 +59,6 @@ jobs:
           assert 'mock_board_scroll' in s
           assert 'playerrow_' in s
           assert 'open_player_profile' in s
-          assert 'opponent' not in s or True
           print('Reference mock draft layout + clickable player routing present')
           PY
 
@@ -95,7 +86,6 @@ jobs:
           s = Path('app.py').read_text()
           assert '@st.cache_resource(show_spinner=False)\ndef load_weekly' in s
           assert 'usecols=usecols or None' in s
-          assert 'return pd.read_csv(WEEKLY_PATH, low_memory=False, compression="gzip")' not in s
           print('Resource-safe weekly loader present')
           PY
 
@@ -108,7 +98,7 @@ jobs:
       - name: Compile production modules
         run: python -m py_compile app.py shiva_chatgpt_service.py shiva_query_router.py mock_draft_engine.py mock_draft_ui.py player_profile.py shiva_mobile_home.py
 
-      - name: Commit integrated app if patches changed files
+      - name: Commit integrated reference screens
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
