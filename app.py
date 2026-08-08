@@ -12,6 +12,7 @@ st.set_page_config(
 )
 
 import shiva_app_v3
+from mobile_bottom_nav_fix import apply_mobile_bottom_nav_fix
 from mock_draft_players_espn import render_mock_draft_room_v2 as render_espn_players_available
 from streamlit_branding_fix import hide_streamlit_branding
 
@@ -75,4 +76,6 @@ try:
 finally:
     st.set_page_config = _original_set_page_config
 
+# Apply last so this targeted mobile override wins over older nav CSS.
+apply_mobile_bottom_nav_fix()
 hide_streamlit_branding()
