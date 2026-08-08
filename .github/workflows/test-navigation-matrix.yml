@@ -1,0 +1,85 @@
+name: Test Every Navigation Button
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - app.py
+      - shiva_app_v3.py
+      - mobile_bottom_nav_fix.py
+      - mock_draft_players_espn.py
+      - .github/workflows/test-navigation-matrix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nav-button:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: bottom_Home
+            start: Players
+            expected: Home
+          - key: bottom_Mock_Draft
+            start: Home
+            expected: Mock Draft
+          - key: bottom_Players
+            start: Home
+            expected: Players
+          - key: bottom_League_History
+            start: Home
+            expected: League History
+          - key: bottom_Draft_Coach
+            start: Home
+            expected: Draft Coach
+          - key: home_draft
+            start: Home
+            expected: Mock Draft
+          - key: home_team
+            start: Home
+            expected: League History
+          - key: home_cheats
+            start: Home
+            expected: Cheat Sheets
+          - key: home_players
+            start: Home
+            expected: Players
+          - key: home_sleepers
+            start: Home
+            expected: Sleepers
+          - key: home_shiva
+            start: Home
+            expected: Shiva Intelligence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Click navigation control
+        env:
+          BUTTON_KEY: ${{ matrix.key }}
+          START_PAGE: ${{ matrix.start }}
+          EXPECTED_PAGE: ${{ matrix.expected }}
+        run: |
+          python - <<'PY'
+          import os
+          from streamlit.testing.v1 import AppTest
+
+          key = os.environ['BUTTON_KEY']
+          start = os.environ['START_PAGE']
+          expected = os.environ['EXPECTED_PAGE']
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.session_state['_shiva_splash_seen'] = True
+          at.session_state['page'] = start
+          at.run(timeout=90)
+          assert not at.exception, [str(x) for x in at.exception]
+          at.button(key=key).click().run(timeout=90)
+          assert not at.exception, (key, [str(x) for x in at.exception])
+          assert at.session_state['page'] == expected, (key, at.session_state['page'], expected)
+          print('PASS', key, start, '->', expected)
+          PY
