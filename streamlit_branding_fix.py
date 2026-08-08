@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from mobile_draft_layout_fix import apply_mobile_draft_layout_fix
+
 
 def _patch_data_loading() -> None:
     """Install one clean rankings loader on every Streamlit rerun.
@@ -166,3 +168,4 @@ def hide_streamlit_branding() -> None:
         """,
         unsafe_allow_html=True,
     )
+    apply_mobile_draft_layout_fix()
