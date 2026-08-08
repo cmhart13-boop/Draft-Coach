@@ -31,7 +31,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile functional shell
-        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_ui_v2.py player_profile.py espn_news_service.py shiva_chatgpt_service.py shiva_engine.py
+        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py espn_news_service.py shiva_chatgpt_service.py shiva_engine.py
 
       - name: Import production shell
         run: python -c "import shiva_app_v3; import app; print('production imports OK')"
@@ -48,8 +48,6 @@ jobs:
           assert 'mobile_nav_override' not in app
           for page in ['Home','Mock Draft','Players','League History','Draft Coach','Sleepers','Cheat Sheets','Shiva Intelligence','Player Profile']:
               assert f'"{page}"' in shell, page
-          for target in ['bottom_Home','bottom_Mock_Draft','bottom_Players','bottom_League_History','bottom_Draft_Coach']:
-              assert target.replace('bottom_', '') or True
           assert 'st.container(key="app_bottom_nav")' in shell
           assert '_go(target)' in shell
           assert 'st.rerun()' in shell
@@ -65,7 +63,7 @@ jobs:
           print('navigation contracts passed')
           PY
 
-      - name: Streamlit app smoke test
+      - name: Streamlit home smoke test
         run: |
           python - <<'PY'
           from streamlit.testing.v1 import AppTest
@@ -73,4 +71,43 @@ jobs:
           at.run(timeout=90)
           assert not at.exception, [str(x) for x in at.exception]
           print('Streamlit home smoke test passed')
+          PY
+
+      - name: Render every primary page without exceptions
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          pages = ['Home','Players','League History','Draft Coach','Sleepers','Cheat Sheets','Shiva Intelligence','Mock Draft']
+          for page in pages:
+              at = AppTest.from_file('app.py', default_timeout=90)
+              at.session_state['_shiva_splash_seen'] = True
+              at.session_state['page'] = page
+              at.run(timeout=90)
+              assert not at.exception, (page, [str(x) for x in at.exception])
+              print('page render passed:', page)
+          PY
+
+      - name: Exercise bottom navigation buttons
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          at = AppTest.from_file('app.py', default_timeout=90)
+          at.session_state['_shiva_splash_seen'] = True
+          at.session_state['page'] = 'Home'
+          at.run(timeout=90)
+          assert not at.exception
+
+          for key, expected in [
+              ('bottom_Players', 'Players'),
+              ('bottom_League_History', 'League History'),
+              ('bottom_Draft_Coach', 'Draft Coach'),
+              ('bottom_Home', 'Home'),
+              ('bottom_Mock_Draft', 'Mock Draft'),
+          ]:
+              at.button(key=key).click().run(timeout=90)
+              assert not at.exception, (key, [str(x) for x in at.exception])
+              assert at.session_state['page'] == expected, (key, at.session_state['page'], expected)
+              print('button navigation passed:', key, '->', expected)
           PY
