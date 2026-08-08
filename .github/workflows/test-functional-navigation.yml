@@ -7,6 +7,9 @@ on:
       - app.py
       - shiva_app_v3.py
       - mock_draft_ui_v2.py
+      - mock_draft_players_espn.py
+      - mobile_bottom_nav_fix.py
+      - streamlit_branding_fix.py
       - player_profile.py
       - espn_news_service.py
       - .github/workflows/test-functional-navigation.yml
@@ -31,36 +34,40 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile functional shell
-        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py player_profile.py espn_news_service.py shiva_chatgpt_service.py shiva_engine.py
+        run: python -m py_compile app.py shiva_app_v3.py shiva_app_v2.py mock_draft_engine.py mock_draft_ui_v2.py mock_draft_players_espn.py mobile_bottom_nav_fix.py streamlit_branding_fix.py player_profile.py espn_news_service.py shiva_chatgpt_service.py shiva_engine.py draft_decision_engine.py shiva_query_router.py
 
       - name: Import production shell
-        run: python -c "import shiva_app_v3; import app; print('production imports OK')"
+        run: python -c "import shiva_app_v3, mock_draft_players_espn, mobile_bottom_nav_fix, app; print('production imports OK')"
 
-      - name: Verify navigation contracts
+      - name: Verify navigation and mobile contracts
         run: |
           python - <<'PY'
           from pathlib import Path
+
           app = Path('app.py').read_text()
           shell = Path('shiva_app_v3.py').read_text()
           news = Path('espn_news_service.py').read_text()
+          nav = Path('mobile_bottom_nav_fix.py').read_text()
+          mock = Path('mock_draft_players_espn.py').read_text()
 
-          assert 'from shiva_app_v3 import run' in app
+          assert 'import shiva_app_v3' in app
+          assert 'render_espn_players_available' in app
+          assert 'apply_mobile_bottom_nav_fix' in app
           assert 'mobile_nav_override' not in app
           for page in ['Home','Mock Draft','Players','League History','Draft Coach','Sleepers','Cheat Sheets','Shiva Intelligence','Player Profile']:
               assert f'"{page}"' in shell, page
           assert 'st.container(key="app_bottom_nav")' in shell
-          assert '_go(target)' in shell
-          assert 'st.rerun()' in shell
-          assert 'query_page' in shell and 'query_player' in shell
-          assert '_clear_profile_state()' in shell
-          assert 'OPEN ON ESPN' in shell
-          assert 'article.get("link")' in shell
+          assert '_go(target)' in shell and 'st.rerun()' in shell
+          assert 'query_page' in shell and 'query_player' in shell and '_clear_profile_state()' in shell
+          assert 'OPEN ON ESPN' in shell and 'article.get("link")' in shell
           assert 'ESPN_RSS_URL' in news and 'ESPN_JSON_URL' in news
-          assert 'render_mock_draft_room_v2(' in shell
-          assert '_team_iq(roi, weekly)' in shell
-          assert '_sleepers(rankings, weekly)' in shell
-          assert '_cheat_sheets(rankings, weekly)' in shell
-          print('navigation contracts passed')
+          assert 'grid-template-columns: repeat(5, minmax(0, 1fr))' in nav
+          assert 'position: fixed' in nav and 'safe-area-inset-bottom' in nav
+          assert 'height: 68px' in nav or 'height: 72px' in nav
+          assert 'player-table-header' in mock and 'queue_btn_' in mock
+          assert 'player_link_html' in mock and 'projected_points' in mock
+          assert 'overflow-x' not in mock or 'hidden' in mock
+          print('navigation and mobile contracts passed')
           PY
 
       - name: Streamlit home smoke test
@@ -68,6 +75,7 @@ jobs:
           python - <<'PY'
           from streamlit.testing.v1 import AppTest
           at = AppTest.from_file('app.py', default_timeout=90)
+          at.session_state['_shiva_splash_seen'] = True
           at.run(timeout=90)
           assert not at.exception, [str(x) for x in at.exception]
           print('Streamlit home smoke test passed')
@@ -88,7 +96,7 @@ jobs:
               print('page render passed:', page)
           PY
 
-      - name: Exercise bottom navigation buttons
+      - name: Exercise repeated bottom navigation
         run: |
           python - <<'PY'
           from streamlit.testing.v1 import AppTest
@@ -99,15 +107,42 @@ jobs:
           at.run(timeout=90)
           assert not at.exception
 
-          for key, expected in [
+          route = [
               ('bottom_Players', 'Players'),
               ('bottom_League_History', 'League History'),
               ('bottom_Draft_Coach', 'Draft Coach'),
               ('bottom_Home', 'Home'),
               ('bottom_Mock_Draft', 'Mock Draft'),
-          ]:
+              ('bottom_Home', 'Home'),
+              ('bottom_Players', 'Players'),
+              ('bottom_Home', 'Home'),
+          ]
+          for key, expected in route:
               at.button(key=key).click().run(timeout=90)
               assert not at.exception, (key, [str(x) for x in at.exception])
               assert at.session_state['page'] == expected, (key, at.session_state['page'], expected)
               print('button navigation passed:', key, '->', expected)
+          PY
+
+      - name: Exercise home feature buttons
+        run: |
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+
+          for key, expected in [
+              ('home_draft', 'Mock Draft'),
+              ('home_team', 'League History'),
+              ('home_cheats', 'Cheat Sheets'),
+              ('home_players', 'Players'),
+              ('home_sleepers', 'Sleepers'),
+              ('home_shiva', 'Shiva Intelligence'),
+          ]:
+              at = AppTest.from_file('app.py', default_timeout=90)
+              at.session_state['_shiva_splash_seen'] = True
+              at.session_state['page'] = 'Home'
+              at.run(timeout=90)
+              at.button(key=key).click().run(timeout=90)
+              assert not at.exception, (key, [str(x) for x in at.exception])
+              assert at.session_state['page'] == expected, (key, at.session_state['page'], expected)
+              print('home feature passed:', key, '->', expected)
           PY
