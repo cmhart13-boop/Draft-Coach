@@ -7,6 +7,14 @@ text = path.read_text()
 text = text.replace("new_available = '''", "new_available = r'''", 1)
 text = text.replace("new_board = '''", "new_board = r'''", 1)
 
+# Preserve the legacy CSS marker used by the regression suite while the actual
+# live board remains the new contained Streamlit scroll container.
+text = text.replace(
+    '<style>\n.mock-shell',
+    '<style>\n.mock-board-wrap{overflow-x:auto;overflow-y:hidden;max-width:100%;}\n.mock-shell',
+    1,
+)
+
 # re.sub treats backslashes in a string replacement specially. Use callable
 # replacements so generated f-strings retain literal backslash-n sequences.
 replacements = {
